@@ -33,17 +33,44 @@ public class EmployeeServiceImpl implements EmployeeService {
         return EmployeeMapper.mapToEmployeeDto(savedEmployee);
     }
 
+    // Get Employee by ID
     @Override
-    public EmployeeDto getEmployeeById(Long employeeId) {
+    public Employee getEmployeeById(Long employeeId) {
 
-        employeeRepository.findById(employeeId)
+        return employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee with id " + employeeId + " not found"));
-        return null;
     }
 
+    // Get all employees
     @Override
     public List<EmployeeDto> getAllEmployees() {
         List<Employee> employees = employeeRepository.findAll();
         return employees.stream().map(EmployeeMapper::mapToEmployeeDto).collect(Collectors.toList());
     }
+
+    // Update employee by ID
+    @Override
+    public EmployeeDto updateEmployee(Long employeeId, EmployeeDto employeeDto) {
+
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Employee with id " + employeeId + " not found"));
+
+        // Update on the table field
+        employee.setFirstName(employeeDto.getFirstName());
+        employee.setLastName(employeeDto.getLastName());
+        employee.setEmail(employeeDto.getEmail());
+
+        // Update the entity with the updatedEmployee variable and return DTO to client
+        Employee updatedEmployee = employeeRepository.save(employee);
+        return EmployeeMapper.mapToEmployeeDto(updatedEmployee);
+    }
+
+    // Delete Employee by ID
+    @Override
+    public EmployeeDto deleteEmployee(Long employeeId, EmployeeDto employeeDto) {
+
+
+    }
+
 }

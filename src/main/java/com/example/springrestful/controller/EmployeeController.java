@@ -1,6 +1,7 @@
 package com.example.springrestful.controller;
 
 import com.example.springrestful.dto.EmployeeDto;
+import com.example.springrestful.entity.Employee;
 import com.example.springrestful.service.EmployeeService;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -37,9 +38,18 @@ public class EmployeeController {
 
     // Get employee by id
     @GetMapping("{id}")
-    public ResponseEntity<EmployeeDto> getEmployeeById(@PathVariable("id") Long employeeId) {
+    public ResponseEntity<Employee> getEmployeeById(@PathVariable("id") Long employeeId) {
 
-        EmployeeDto employeeDto = employeeService.getEmployeeById(employeeId);
+        Employee employeeDto = employeeService.getEmployeeById(employeeId);
         return new ResponseEntity<>(employeeDto, HttpStatus.OK);
+    }
+
+    // Update Employee by ID
+    @PutMapping({"{id}"})
+    public ResponseEntity<EmployeeDto> updateEmployee(@PathVariable("id") long employeeId,
+                                                      @RequestBody EmployeeDto employeeDto) {
+
+        EmployeeDto updatedEmployee = employeeService.updateEmployee(employeeId, employeeDto);
+        return new ResponseEntity<>(updatedEmployee, HttpStatus.OK);
     }
 }

@@ -1,6 +1,7 @@
 package com.example.springrestful.service;
 
 import com.example.springrestful.dto.EmployeeDto;
+import com.example.springrestful.entity.Employee;
 
 import java.util.List;
 
@@ -10,8 +11,14 @@ public interface EmployeeService {
     EmployeeDto createEmployee(EmployeeDto employeeDto);
 
     // Get employee interface
-    EmployeeDto getEmployeeById(Long employeeId);
+    Employee getEmployeeById(Long employeeId);
 
     // Get all employees using utils.List
     List<EmployeeDto> getAllEmployees();
+
+    // Update employee by ID
+    EmployeeDto updateEmployee(Long employeeId, EmployeeDto employeeDto);
+
+    // Delete Employee by ID
+    EmployeeDto deleteEmployee(Long employeeId, EmployeeDto employeeDto);
 }
