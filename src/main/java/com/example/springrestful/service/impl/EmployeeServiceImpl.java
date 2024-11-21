@@ -22,7 +22,6 @@ public class EmployeeServiceImpl implements EmployeeService {
     // Record the client request into the database (DTO -> JPA)
     @Override
     public EmployeeDto createEmployee(EmployeeDto employeeDto) {
-
         // Convert DTO to Entity in order to write into the database entity
         Employee employee = EmployeeMapper.mapToEmployeeJpa(employeeDto);
 
@@ -36,7 +35,6 @@ public class EmployeeServiceImpl implements EmployeeService {
     // Get Employee by ID
     @Override
     public Employee getEmployeeById(Long employeeId) {
-
         return employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee with id " + employeeId + " not found"));
     }
@@ -45,16 +43,16 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     public List<EmployeeDto> getAllEmployees() {
         List<Employee> employees = employeeRepository.findAll();
-        return employees.stream().map(EmployeeMapper::mapToEmployeeDto).collect(Collectors.toList());
+        return employees.stream()
+                .map(EmployeeMapper::mapToEmployeeDto)
+                .collect(Collectors.toList());
     }
 
     // Update employee by ID
     @Override
     public EmployeeDto updateEmployee(Long employeeId, EmployeeDto employeeDto) {
-
         Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException("Employee with id " + employeeId + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Employee with id " + employeeId + " not found"));
 
         // Update on the table field
         employee.setFirstName(employeeDto.getFirstName());
@@ -69,8 +67,10 @@ public class EmployeeServiceImpl implements EmployeeService {
     // Delete Employee by ID
     @Override
     public EmployeeDto deleteEmployee(Long employeeId, EmployeeDto employeeDto) {
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee with id " + employeeId + " not found"));
 
-
+        employeeRepository.delete(employee);
+        return EmployeeMapper.mapToEmployeeDto(employee);
     }
-
 }
