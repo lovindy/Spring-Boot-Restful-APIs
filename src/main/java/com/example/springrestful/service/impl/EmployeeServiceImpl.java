@@ -2,6 +2,7 @@ package com.example.springrestful.service.impl;
 
 import com.example.springrestful.dto.EmployeeDto;
 import com.example.springrestful.entity.Employee;
+import com.example.springrestful.exception.ResourceNotFoundException;
 import com.example.springrestful.mapper.EmployeeMapper;
 import com.example.springrestful.repository.EmployeeRepository;
 import com.example.springrestful.service.EmployeeService;
@@ -34,14 +35,15 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public EmployeeDto getEmployeeById(Long employeeId) {
+
+        employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee with id " + employeeId + " not found"));
         return null;
     }
 
     @Override
     public List<EmployeeDto> getAllEmployees() {
         List<Employee> employees = employeeRepository.findAll();
-        return employees.stream()
-                .map(EmployeeMapper::mapToEmployeeDto)
-                .collect(Collectors.toList());
+        return employees.stream().map(EmployeeMapper::mapToEmployeeDto).collect(Collectors.toList());
     }
 }
