@@ -3,7 +3,7 @@ package com.example.springrestful.controller;
 import com.example.springrestful.dto.AuthResponse;
 import com.example.springrestful.dto.LoginRequest;
 import com.example.springrestful.dto.UserRegistrationRequest;
-import com.example.springrestful.service.AuthService;
+import com.example.springrestful.security.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

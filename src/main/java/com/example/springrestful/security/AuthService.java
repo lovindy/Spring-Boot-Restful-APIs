@@ -1,4 +1,4 @@
-package com.example.springrestful.service;
+package com.example.springrestful.security;
 
 import com.example.springrestful.dto.AuthResponse;
 import com.example.springrestful.dto.LoginRequest;
@@ -42,9 +42,16 @@ public class AuthService {
         User user = UserMapper.toEntity(request);
         user = userRepository.save(user);
 
-        String token = jwtUtil.generateToken((UserDetails) user);
-        return new AuthResponse(token, UserMapper.toResponse(user));
+        String accessToken = jwtUtil.generateToken((UserDetails) user);
+        String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .user(UserMapper.toResponse(user))
+                .build();
     }
+
 
     public AuthResponse login(LoginRequest request) {
         authenticationManager.authenticate(
@@ -54,8 +61,14 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new UserAuthenticationException("Invalid credentials"));
 
-        String token = jwtUtil.generateToken((UserDetails) user);
-        return new AuthResponse(token, UserMapper.toResponse(user));
+        String accessToken = jwtUtil.generateToken((UserDetails) user);
+        String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .user(UserMapper.toResponse(user))
+                .build();
     }
 
     public AuthResponse refreshToken(String refreshToken) {
@@ -63,8 +76,14 @@ public class AuthService {
         User user = userRepository.findByEmail(username)
                 .orElseThrow(() -> new UserAuthenticationException("User not found"));
 
-        String newToken = jwtUtil.generateToken((UserDetails) user);
-        return new AuthResponse(newToken, UserMapper.toResponse(user));
+        String accessToken = jwtUtil.generateToken((UserDetails) user);
+        String newRefreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(newRefreshToken)
+                .user(UserMapper.toResponse(user))
+                .build();
     }
 
     private String generatePasswordResetToken() {

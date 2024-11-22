@@ -8,23 +8,28 @@ import org.springframework.stereotype.Component;
 @Component
 public class UserMapper {
     public static User toEntity(UserRegistrationRequest request) {
-        User user = new User();
-        user.setEmail(request.getEmail());
-        user.setUsername(request.getUsername());
-        user.setPassword(request.getPassword());
-        return user;
+        return User.builder()
+                .email(request.getEmail())
+                .username(request.getUsername())
+                .password(request.getPassword())
+                .build();
     }
 
     public static UserRegistrationRequest toDto(User user) {
-        UserRegistrationRequest request = new UserRegistrationRequest();
-        request.setEmail(user.getEmail());
-        request.setUsername(user.getUsername());
-        return request;
+        return UserRegistrationRequest.builder()
+                .email(user.getEmail())
+                .username(user.getUsername())
+                .build();
     }
 
     public static UserResponse toResponse(User user) {
-
-        UserMapper mapper = new UserMapper();
-        return toResponse(user);
+        return UserResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .username(user.getUsername())
+                .roles(user.getRoles())
+                .emailVerified(user.isEmailVerified())
+                .twoFactorAuthEnabled(user.isTwoFactorAuthEnabled())
+                .build();
     }
 }
