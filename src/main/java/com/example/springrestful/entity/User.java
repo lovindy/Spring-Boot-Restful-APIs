@@ -5,17 +5,16 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Set;
 
 @Entity
 @Data
-@Setter
-@Getter
+@Builder
 @AllArgsConstructor
 @NoArgsConstructor
 @Table(name = "users")
 public class User {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -33,7 +32,7 @@ public class User {
     @Enumerated(EnumType.STRING)
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "role")
-    private Set<UserRole> roles;
+    private Set<UserRole> roles = new HashSet<>();
 
     private boolean emailVerified;
     private String emailVerificationToken;
@@ -45,16 +44,24 @@ public class User {
     private boolean twoFactorAuthEnabled;
     private String twoFactorAuthSecret;
 
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, optional = true)
-    private Employee employee;
 
-    // Method to add roles
+    // For admin users - collection of employees they manage
+    @OneToMany(mappedBy = "admin", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private Set<Employee> managedEmployees = new HashSet<>();
+
+    // For employee users - their employee profile
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, optional = true)
+    private Employee employeeProfile;
+
     public void addRole(UserRole role) {
         this.roles.add(role);
     }
 
-    // Method to remove roles
     public void removeRole(UserRole role) {
         this.roles.remove(role);
+    }
+
+    public boolean isAdmin() {
+        return this.roles.contains(UserRole.ADMIN);
     }
 }

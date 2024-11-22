@@ -1,13 +1,13 @@
-// com.example.spring-restful.dto.UserRegistrationRequest.java
 package com.example.springrestful.dto;
 
+import com.example.springrestful.enums.UserRole;
 import lombok.Data;
 
 @Data
 public class UserRegistrationRequest {
 
-    public String getUsername;
-    private String username;
     private String email;
+    private String username;
     private String password;
+    private UserRole role;
 }

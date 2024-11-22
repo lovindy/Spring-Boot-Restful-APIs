@@ -1,21 +1,16 @@
 package com.example.springrestful.dto;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class EmployeeDto {
+public class EmployeeResponse {
 
     private Long id;
-    private String username;
-    private String password;
     private String firstName;
     private String lastName;
     private String email;
@@ -23,4 +18,9 @@ public class EmployeeDto {
     private String department;
     private String position;
     private LocalDate hireDate;
+    private boolean isActive;
+    private Long adminId;
+    private String adminEmail;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

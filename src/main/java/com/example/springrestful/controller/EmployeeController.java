@@ -2,62 +2,50 @@ package com.example.springrestful.controller;
 
 import com.example.springrestful.dto.EmployeeDto;
 import com.example.springrestful.entity.Employee;
-import com.example.springrestful.response.StandardResponse;
 import com.example.springrestful.service.EmployeeService;
-import lombok.AllArgsConstructor;
-import org.springframework.http.HttpStatus;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@AllArgsConstructor
 @RestController
-@RequestMapping("api/employees")
+@RequestMapping("/api/v1/employees")
+@RequiredArgsConstructor
 public class EmployeeController {
 
-    // Calling dependencies
-    private EmployeeService employeeService;
+    private final EmployeeService employeeService;
 
-    // Build Add Employee REST API
-    @PostMapping
-    public ResponseEntity<StandardResponse<EmployeeDto>> createEmployee(@RequestBody EmployeeDto employeeDto) {
-        // Add into the database table or entity
-        EmployeeDto savedEmployee = employeeService.createEmployee(employeeDto);
-
-        // Response to the client side using StandardResponse
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(StandardResponse.created(savedEmployee));
-    }
-
-    // Get all employees
     @GetMapping
-    public ResponseEntity<StandardResponse<List<EmployeeDto>>> getAllEmployees() {
-        List<EmployeeDto> employees = employeeService.getAllEmployees();
-        return ResponseEntity.ok(StandardResponse.success(employees));
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<EmployeeDto>> getAllEmployees(Pageable pageable) {
+        return ResponseEntity.ok(employeeService.getAllEmployees(pageable));
     }
 
-    // Get employee by id
-    @GetMapping("{id}")
-    public ResponseEntity<StandardResponse<Employee>> getEmployeeById(@PathVariable("id") Long employeeId) {
-        Employee employeeDto = employeeService.getEmployeeById(employeeId);
-        return ResponseEntity.ok(StandardResponse.success(employeeDto));
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @securityService.isOwner(#id)")
+    public ResponseEntity<Employee> getEmployee(@PathVariable Long id) {
+        return ResponseEntity.ok(employeeService.getEmployeeById(id));
     }
 
-    // Update Employee by ID
-    @PutMapping("{id}")
-    public ResponseEntity<StandardResponse<EmployeeDto>> updateEmployee(
-            @PathVariable("id") long employeeId,
-            @RequestBody EmployeeDto employeeDto) {
-        EmployeeDto updatedEmployee = employeeService.updateEmployee(employeeId, employeeDto);
-        return ResponseEntity.ok(StandardResponse.success(updatedEmployee));
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @securityService.isOwner(#id)")
+    public ResponseEntity<EmployeeDto> updateEmployee(
+            @PathVariable Long id,
+            @RequestBody @Valid EmployeeDto employeeDto
+    ) {
+        return ResponseEntity.ok(employeeService.updateEmployee(id, employeeDto));
     }
 
-    // Delete Employee by ID
-    @DeleteMapping("{id}")
-    public ResponseEntity<StandardResponse<EmployeeDto>> deleteEmployee(
-            @PathVariable("id") Long employeeId) {
-        EmployeeDto deletedEmployee = employeeService.deleteEmployee(employeeId, null);
-        return ResponseEntity.ok(StandardResponse.success(deletedEmployee));
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteEmployee(@PathVariable Long id) {
+        employeeService.deleteEmployee(id);
+        return ResponseEntity.ok().build();
     }
 }
+
+

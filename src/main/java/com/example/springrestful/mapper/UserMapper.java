@@ -1,6 +1,7 @@
 package com.example.springrestful.mapper;
 
 import com.example.springrestful.dto.UserRegistrationRequest;
+import com.example.springrestful.dto.UserResponse;
 import com.example.springrestful.entity.User;
 import org.springframework.stereotype.Component;
 
@@ -19,5 +20,11 @@ public class UserMapper {
         request.setEmail(user.getEmail());
         request.setUsername(user.getUsername());
         return request;
+    }
+
+    public static UserResponse toResponse(User user) {
+
+        UserMapper mapper = new UserMapper();
+        return toResponse(user);
     }
 }

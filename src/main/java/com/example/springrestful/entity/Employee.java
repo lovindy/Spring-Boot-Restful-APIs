@@ -1,46 +1,18 @@
-//package com.example.springrestful.entity;
-//
-//import jakarta.persistence.*;
-//import lombok.AllArgsConstructor;
-//import lombok.Getter;
-//import lombok.NoArgsConstructor;
-//import lombok.Setter;
-//
-//@Getter
-//@Setter
-//@NoArgsConstructor
-//@AllArgsConstructor
-//@Entity
-//@Table(name = "employees")
-//public class Employee {
-//    // Set the unique id for the employee
-//    @Id
-//    @GeneratedValue(strategy = GenerationType.IDENTITY)
-//    private Long id; // primary key from the lombok id
-//
-//    @Column(name = "first_name")
-//    private String firstName;
-//
-//    @Column(name = "last_name")
-//    private String lastName;
-//
-//    @Column(name = "email_id", nullable = false, unique = true)
-//    private String email;
-//}
-
+// Employee.java
 package com.example.springrestful.entity;
 
-import com.example.springrestful.enums.UserRole;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
+@Entity
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Entity
 @Table(name = "employees")
 public class Employee {
     @Id
@@ -51,6 +23,10 @@ public class Employee {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "admin_id", nullable = false)
+    private User admin;
+
     @Column(name = "first_name")
     private String firstName;
 
@@ -60,15 +36,29 @@ public class Employee {
     @Column(name = "email_id", nullable = false, unique = true)
     private String email;
 
-    @Column(name = "phone_number", nullable = false, unique = true)
+    @Column(name = "phone_number", unique = true)
     private String phoneNumber;
-
-    @Enumerated(EnumType.STRING)
-    private UserRole role;
 
     private LocalDate hireDate;
     private String department;
+    private String position;
+    private Double salary;
     private boolean isActive;
 
-    // Additional fields like salary, position, etc. can be added
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

@@ -7,8 +7,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @AllArgsConstructor
 @RestController
-@RequestMapping("api/users")
+@RequestMapping("api/user/")
 public class UserController {
+
 
 
 
