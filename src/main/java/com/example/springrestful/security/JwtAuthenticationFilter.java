@@ -24,6 +24,47 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserDetailsService userDetailsService;
 
+//    @Override
+//    protected void doFilterInternal(
+//            @NonNull HttpServletRequest request,
+//            @NonNull HttpServletResponse response,
+//            @NonNull FilterChain filterChain
+//    ) throws ServletException, IOException {
+//        try {
+//            // Skip authentication for specific endpoints
+//            if (shouldSkipAuthentication(request)) {
+//                filterChain.doFilter(request, response);
+//                return;
+//            }
+//
+//            // Extract the token from the request
+//            final String jwt = jwtUtil.extractTokenFromRequest(request);
+//
+//            if (jwt != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+//                final String username = jwtUtil.extractUsername(jwt);
+//
+//                if (username != null) {
+//                    UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+//
+//                    if (jwtUtil.validateToken(jwt, userDetails)) {
+//                        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+//                                userDetails,
+//                                null,
+//                                userDetails.getAuthorities()
+//                        );
+//                        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+//
+//                        SecurityContextHolder.getContext().setAuthentication(authToken);
+//                    }
+//                }
+//            }
+//        } catch (Exception e) {
+//            logger.error("Cannot set user authentication: {}");
+//        }
+//
+//        filterChain.doFilter(request, response);
+//    }
+
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
@@ -31,39 +72,41 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
         try {
-            // Skip authentication for specific endpoints
+            // Skip authentication for public endpoints
             if (shouldSkipAuthentication(request)) {
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            // Extract the token from the request
+            // Extract token from the request
             final String jwt = jwtUtil.extractTokenFromRequest(request);
 
             if (jwt != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 final String username = jwtUtil.extractUsername(jwt);
 
                 if (username != null) {
-                    UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
+                    // Validate the JWT token
                     if (jwtUtil.validateToken(jwt, userDetails)) {
+                        // Set the authentication in the security context
                         UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                                 userDetails,
                                 null,
                                 userDetails.getAuthorities()
                         );
                         authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
                         SecurityContextHolder.getContext().setAuthentication(authToken);
                     }
                 }
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}");
+            logger.error("Error occurred in JWT filter: {}", e);
         }
 
         filterChain.doFilter(request, response);
     }
+
 
     private boolean shouldSkipAuthentication(HttpServletRequest request) {
         String path = request.getRequestURI();

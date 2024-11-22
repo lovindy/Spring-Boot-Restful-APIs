@@ -1,7 +1,7 @@
 package com.example.springrestful.config;
 
 import com.example.springrestful.security.JwtAuthenticationFilter;
-import com.example.springrestful.service.impl.CustomUserDetailsService;
+import com.example.springrestful.service.impl.UserDetailsServiceImpl;
 import jakarta.servlet.Filter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -26,15 +26,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
-    private final CustomUserDetailsService customUserDetailsService;
+    private final UserDetailsServiceImpl userDetailsService;
 
     // Remove AuthenticationProvider from constructor injection
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthFilter,
-            CustomUserDetailsService customUserDetailsService
+            UserDetailsServiceImpl UserDetailsService
     ) {
         this.jwtAuthFilter = jwtAuthFilter;
-        this.customUserDetailsService = customUserDetailsService;
+        this.userDetailsService = UserDetailsService;
     }
 
     @Bean
@@ -58,7 +58,7 @@ public class SecurityConfig {
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(customUserDetailsService);
+        authProvider.setUserDetailsService(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }
