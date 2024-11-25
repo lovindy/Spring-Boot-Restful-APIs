@@ -1,21 +1,21 @@
 export interface User {
-  id: number;
-  username: string;
-  email: string;
+  id: number
+  username: string
+  email: string
   // Add other user properties
 }
 
 export interface LoginRequest {
-  email: string;
-  password: string;
+  email: string
+  password: string
 }
 
 export interface LoginResponse {
-  token: string;
-  user: User;
+  token: string
+  user: User
 }
 
 export interface ApiError {
-  message: string;
-  status: number;
+  message: string
+  status: number
 }
