@@ -8,9 +8,9 @@ defineProps<{
   <div class="greetings">
     <h1 class="green">{{ msg }}</h1>
     <h3>
-      You’ve successfully created a project with
-      <a href="https://vite.dev/" target="_blank" rel="noopener">Vite</a> +
-      <a href="https://vuejs.org/" target="_blank" rel="noopener">Vue 3</a>. What's next?
+      Welcome to SeangDev Application.
+      <a href="https://landing.hexcode.anbschool.org/" target="_blank" rel="noopener">Vottamean Laning</a> +
+      <a href="https://hexcode.anbschool.org/" target="_blank" rel="noopener">Vottamean Application</a>. Let's Get Started!
     </h3>
   </div>
 </template>
