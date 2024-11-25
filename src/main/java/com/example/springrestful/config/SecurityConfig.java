@@ -28,29 +28,26 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final UserDetailsServiceImpl userDetailsService;
 
-    // Remove AuthenticationProvider from constructor injection
-    public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthFilter,
-            UserDetailsServiceImpl UserDetailsService
-    ) {
+    // Constructor injection for JWT filter and custom user details service
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, UserDetailsServiceImpl userDetailsService) {
         this.jwtAuthFilter = jwtAuthFilter;
-        this.userDetailsService = UserDetailsService;
+        this.userDetailsService = userDetailsService;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for stateless authentication
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**").permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/v1/auth/**").permitAll()  // Allow access to auth endpoints
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")  // Only allow admin users for admin routes
+                        .anyRequest().authenticated()  // Require authentication for other requests
                 )
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS) // Stateless session management (JWT)
                 )
-                .authenticationProvider(authenticationProvider()) // Call the bean method directly
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class); // Removed cast to Filter
+                .authenticationProvider(authenticationProvider())  // Add authentication provider
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class); // Add JWT filter before the authentication filter
 
         return http.build();
     }
@@ -58,18 +55,18 @@ public class SecurityConfig {
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder());
+        authProvider.setUserDetailsService(userDetailsService); // Set custom user details service
+        authProvider.setPasswordEncoder(passwordEncoder()); // Set password encoder (BCrypt)
         return authProvider;
     }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
+        return config.getAuthenticationManager(); // Provide AuthenticationManager for authentication flows
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(); // BCrypt password encoder
     }
 }
