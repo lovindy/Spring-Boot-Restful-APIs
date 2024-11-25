@@ -7,6 +7,11 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
+    // Automatically generate the query to find a user by their email verification token
+    static Optional<User> findByEmailVerificationToken(String token) {
+        return null;
+    }
+
     Optional<User> findByUsername(String username);
 
     Optional<User> findByEmail(String email);
