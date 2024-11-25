@@ -9,7 +9,9 @@ import com.example.springrestful.mapper.UserMapper;
 import com.example.springrestful.repository.UserRepository;
 import com.example.springrestful.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,8 +22,10 @@ import java.time.LocalDateTime;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-@Service
+
 @RequiredArgsConstructor
+@Service
+@Slf4j
 public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -52,23 +56,41 @@ public class AuthService {
                 .build();
     }
 
-
     public AuthResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+        try {
+            log.debug("Attempting login for email: {}", request.getEmail());
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new UserAuthenticationException("Invalid credentials"));
+            // First check if user exists
+            User user = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new UserAuthenticationException("User not found with email: " + request.getEmail()));
 
-        String accessToken = jwtUtil.generateToken((UserDetails) user);
-        String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
+            // Attempt authentication
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()
+                    )
+            );
 
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .user(UserMapper.toResponse(user))
-                .build();
+            log.debug("Authentication successful for email: {}", request.getEmail());
+
+            // Generate tokens
+            String accessToken = jwtUtil.generateToken((UserDetails) user);
+            String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
+
+            return AuthResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .user(UserMapper.toResponse(user))
+                    .build();
+
+        } catch (BadCredentialsException e) {
+            log.error("Authentication failed for email: {}", request.getEmail());
+            throw new UserAuthenticationException("Invalid email or password");
+        } catch (Exception e) {
+            log.error("Unexpected error during login for email: {}", request.getEmail(), e);
+            throw new UserAuthenticationException("An error occurred during login");
+        }
     }
 
     public AuthResponse refreshToken(String refreshToken) {
