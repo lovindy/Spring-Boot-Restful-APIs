@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @RequiredArgsConstructor
 @Service
@@ -34,26 +35,43 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(UserRegistrationRequest request) {
-        // Check if email already exists
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new UserAuthenticationException("Email already registered");
+        // Check if username already exists
+        if (userRepository.findByUsername(request.getUsername()).isPresent()) {
+            throw new UserAuthenticationException("Username already exists");
+        }
+
+        // Find existing user by email
+        Optional<User> existingUser = userRepository.findByEmail(request.getEmail());
+
+        // If user exists and is already verified, throw an exception
+        if (existingUser.isPresent() && existingUser.get().getEmailVerified()) {
+            throw new UserAuthenticationException("Email already registered and verified");
+        }
+
+        User user;
+        // If user exists but not verified, update their details
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+            log.info("Updating existing unverified user: {}", user.getEmail());
+        } else {
+            // Create a new user
+            user = UserMapper.toEntity(request);
         }
 
         // Encode password
-        request.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
 
-        // Create user entity
-        User user = UserMapper.toEntity(request);
-
-        // Generate verification code
+        // Generate new verification code
         String verificationCode = emailService.generateVerificationCode();
 
-        // Set verification code and expiry
+        // Set verification details
         user.setEmailVerificationCode(verificationCode);
         user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
         user.setEmailVerified(false);
+        user.setUsername(request.getUsername());
+        user.setEmail(request.getEmail());
 
-        // Save user
+        // Save or update user
         user = userRepository.save(user);
 
         // Send verification code via email
