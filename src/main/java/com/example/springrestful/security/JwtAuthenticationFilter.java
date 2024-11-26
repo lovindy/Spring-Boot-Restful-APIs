@@ -1,4 +1,3 @@
-// JwtAuthenticationFilter.java
 package com.example.springrestful.security;
 
 import com.example.springrestful.util.JwtUtil;
@@ -65,6 +64,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return path.contains("/api/v1/auth/login") ||
                 path.contains("/api/v1/auth/register") ||
+                path.contains("/api/v1/auth/verify-email") ||
                 path.contains("/api/v1/auth/forgot-password") ||
                 path.contains("/api/v1/auth/reset-password");
     }

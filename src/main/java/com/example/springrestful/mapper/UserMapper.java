@@ -28,7 +28,7 @@ public class UserMapper {
                 .email(user.getEmail())
                 .username(user.getUsername())
                 .roles(user.getRoles())
-                .emailVerified(user.isEmailVerified())
+                .emailVerified(user.getEmailVerified())
                 .twoFactorAuthEnabled(user.isTwoFactorAuthEnabled())
                 .build();
     }

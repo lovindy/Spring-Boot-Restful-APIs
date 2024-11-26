@@ -18,10 +18,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
-import java.security.SecureRandom;
-import java.util.Base64;
-
 
 @RequiredArgsConstructor
 @Service
@@ -33,19 +31,58 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
 
-    private static final int TOKEN_LENGTH = 32;
-    private static final SecureRandom secureRandom = new SecureRandom();
-
     @Transactional
     public AuthResponse register(UserRegistrationRequest request) {
+        // Check if email already exists
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new UserAuthenticationException("Email already registered");
         }
 
+        // Encode password
         request.setPassword(passwordEncoder.encode(request.getPassword()));
+
+        // Create user entity
         User user = UserMapper.toEntity(request);
+
+        // Generate verification code
+        String verificationCode = emailService.generateVerificationCode();
+
+        // Set verification code and expiry
+        user.setEmailVerificationCode(verificationCode);
+        user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
+        user.setEmailVerified(false);
+
+        // Save user
         user = userRepository.save(user);
 
+        // Send verification code via email
+        emailService.sendVerificationCode(user.getEmail(), verificationCode);
+
+        // Return response without tokens since email is not verified
+        return AuthResponse.builder()
+                .user(UserMapper.toResponse(user))
+                .build();
+    }
+
+    @Transactional
+    public AuthResponse verifyEmail(String email, String verificationCode) {
+        // Find user by email
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UserAuthenticationException("User not found"));
+
+        // Check if verification code is correct and not expired
+        if (!verificationCode.equals(user.getEmailVerificationCode()) ||
+                user.getEmailVerificationCodeExpiry().isBefore(Instant.now())) {
+            throw new UserAuthenticationException("Invalid or expired verification code");
+        }
+
+        // Mark email as verified
+        user.setEmailVerified(true);
+        user.setEmailVerificationCode(null);
+        user.setEmailVerificationCodeExpiry(null);
+        userRepository.save(user);
+
+        // Generate tokens
         String accessToken = jwtUtil.generateToken((UserDetails) user);
         String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
 
@@ -60,9 +97,14 @@ public class AuthService {
         try {
             log.debug("Attempting login for email: {}", request.getEmail());
 
-            // First check if user exists
+            // Find user by email
             User user = userRepository.findByEmail(request.getEmail())
                     .orElseThrow(() -> new UserAuthenticationException("User not found with email: " + request.getEmail()));
+
+            // Check if email is verified
+            if (!user.getEmailVerified()) {
+                throw new UserAuthenticationException("Email not verified");
+            }
 
             // Attempt authentication
             authenticationManager.authenticate(
@@ -91,54 +133,5 @@ public class AuthService {
             log.error("Unexpected error during login for email: {}", request.getEmail(), e);
             throw new UserAuthenticationException("An error occurred during login");
         }
-    }
-
-    public AuthResponse refreshToken(String refreshToken) {
-        String username = jwtUtil.extractUsername(refreshToken.substring(7));
-        User user = userRepository.findByEmail(username)
-                .orElseThrow(() -> new UserAuthenticationException("User not found"));
-
-        String accessToken = jwtUtil.generateToken((UserDetails) user);
-        String newRefreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
-
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(newRefreshToken)
-                .user(UserMapper.toResponse(user))
-                .build();
-    }
-
-    private String generatePasswordResetToken() {
-        byte[] tokenBytes = new byte[TOKEN_LENGTH];
-        secureRandom.nextBytes(tokenBytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
-    }
-
-    @Transactional
-    public void initiatePasswordReset(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserAuthenticationException("User not found"));
-
-        String resetToken = generatePasswordResetToken();
-        user.setPasswordResetToken(resetToken);
-        user.setPasswordResetTokenExpiry(LocalDateTime.now().plusHours(24));
-        userRepository.save(user);
-
-        emailService.sendPasswordResetEmail(email, resetToken);
-    }
-
-    @Transactional
-    public void resetPassword(String token, String newPassword) {
-        User user = (User) userRepository.findByPasswordResetToken(token)
-                .orElseThrow(() -> new UserAuthenticationException("Invalid token"));
-
-        if (user.getPasswordResetTokenExpiry().isBefore(LocalDateTime.now())) {
-            throw new UserAuthenticationException("Token expired");
-        }
-
-        user.setPassword(passwordEncoder.encode(newPassword));
-        user.setPasswordResetToken(null);
-        user.setPasswordResetTokenExpiry(null);
-        userRepository.save(user);
     }
 }
