@@ -36,35 +36,24 @@ public class AuthService {
     // Register request
     @Transactional
     public AuthResponse register(UserRegistrationRequest request) {
-        // Find existing user by username
-        Optional<User> existingUsernameUser = userRepository.findByUsername(request.getUsername());
-
-        // Find existing user by email
+        // Check for an existing user by email
         Optional<User> existingEmailUser = userRepository.findByEmail(request.getEmail());
 
-        User user;
+        // Check for an existing user by username
+        Optional<User> existingUsernameUser = userRepository.findByUsername(request.getUsername());
 
-        // If username already exists and it's a different user
-        if (existingUsernameUser.isPresent() &&
-                !existingUsernameUser.get().getEmail().equals(request.getEmail())) {
+        // If email is already registered (verified or not), throw an exception
+        if (existingEmailUser.isPresent()) {
+            throw new UserAuthenticationException("Email is already registered");
+        }
+
+        // If username is already taken, throw an exception
+        if (existingUsernameUser.isPresent()) {
             throw new UserAuthenticationException("Username already exists");
         }
 
-        // If user exists by email
-        if (existingEmailUser.isPresent()) {
-            // If email is already verified with a different username
-            if (existingEmailUser.get().getEmailVerified() &&
-                    !existingEmailUser.get().getUsername().equals(request.getUsername())) {
-                throw new UserAuthenticationException("Email already registered and verified");
-            }
-
-            // If email exists but is not verified, update the existing user
-            user = existingEmailUser.get();
-            log.info("Updating existing unverified user: {}", user.getEmail());
-        } else {
-            // Create a new user
-            user = UserMapper.toEntity(request);
-        }
+        // Create a new user since both email and username are unique
+        User user = UserMapper.toEntity(request);
 
         // Encode password
         user.setPassword(passwordEncoder.encode(request.getPassword()));
@@ -76,10 +65,8 @@ public class AuthService {
         user.setEmailVerificationCode(verificationCode);
         user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
         user.setEmailVerified(false);
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
 
-        // Save or update user
+        // Save the new user
         user = userRepository.save(user);
 
         // Send verification code via email
