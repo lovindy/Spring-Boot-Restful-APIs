@@ -9,5 +9,4 @@ class SpringRestfulApplicationTests {
     @Test
     void contextLoads() {
     }
-
 }
