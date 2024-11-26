@@ -1,6 +1,8 @@
 package com.example.springrestful.controller;
 
+import ch.qos.logback.classic.Logger;
 import com.example.springrestful.dto.AuthResponse;
+import com.example.springrestful.dto.EmailVerificationRequest;
 import com.example.springrestful.dto.LoginRequest;
 import com.example.springrestful.dto.UserRegistrationRequest;
 import com.example.springrestful.repository.UserRepository;
@@ -32,10 +34,14 @@ public class AuthController {
 
     @PostMapping("/verify-email")
     public ResponseEntity<AuthResponse> verifyEmail(
-            @RequestParam String email,
-            @RequestParam String verificationCode
+            @RequestBody @Valid EmailVerificationRequest verificationRequest
     ) {
-        return ResponseEntity.ok(authService.verifyEmail(email, verificationCode));
+        return ResponseEntity.ok(
+                authService.verifyEmail(
+                        verificationRequest.getEmail(),
+                        verificationRequest.getVerificationCode()
+                )
+        );
     }
 
     @PostMapping("/login")
@@ -43,6 +49,14 @@ public class AuthController {
             @RequestBody @Valid LoginRequest request
     ) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    // Optional: Resend verification code endpoint
+    @PostMapping("/resend-verification-code")
+    public ResponseEntity<AuthResponse> resendVerificationCode(
+            @RequestParam String email
+    ) {
+        return ResponseEntity.ok(authService.resendVerificationCode(email));
     }
 
 //    @PostMapping("/refresh-token")

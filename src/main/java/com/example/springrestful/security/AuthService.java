@@ -33,6 +33,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
 
+    // Register request
     @Transactional
     public AuthResponse register(UserRegistrationRequest request) {
         // Find existing user by username
@@ -90,6 +91,7 @@ public class AuthService {
                 .build();
     }
 
+    // Verify code process
     @Transactional
     public AuthResponse verifyEmail(String email, String verificationCode) {
         // Find user by email
@@ -120,6 +122,7 @@ public class AuthService {
                 .build();
     }
 
+    // Login request
     public AuthResponse login(LoginRequest request) {
         try {
             log.debug("Attempting login for email: {}", request.getEmail());
@@ -161,5 +164,34 @@ public class AuthService {
             log.error("Unexpected error during login for email: {}", request.getEmail(), e);
             throw new UserAuthenticationException("An error occurred during login");
         }
+    }
+
+    // Resend the 6-digit code request
+    @Transactional
+    public AuthResponse resendVerificationCode(String email) {
+        // Find user by email
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UserAuthenticationException("User not found"));
+
+        // Check if email is already verified
+        if (user.getEmailVerified()) {
+            throw new UserAuthenticationException("Email is already verified");
+        }
+
+        // Generate new verification code
+        String verificationCode = emailService.generateVerificationCode();
+
+        // Update verification details
+        user.setEmailVerificationCode(verificationCode);
+        user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
+        userRepository.save(user);
+
+        // Send new verification code via email
+        emailService.sendVerificationCode(user.getEmail(), verificationCode);
+
+        // Return user response without tokens
+        return AuthResponse.builder()
+                .user(UserMapper.toResponse(user))
+                .build();
     }
 }
