@@ -35,23 +35,30 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(UserRegistrationRequest request) {
-        // Check if username already exists
-        if (userRepository.findByUsername(request.getUsername()).isPresent()) {
+        // Find existing user by username
+        Optional<User> existingUsernameUser = userRepository.findByUsername(request.getUsername());
+
+        // Find existing user by email
+        Optional<User> existingEmailUser = userRepository.findByEmail(request.getEmail());
+
+        User user;
+
+        // If username already exists and it's a different user
+        if (existingUsernameUser.isPresent() &&
+                !existingUsernameUser.get().getEmail().equals(request.getEmail())) {
             throw new UserAuthenticationException("Username already exists");
         }
 
-        // Find existing user by email
-        Optional<User> existingUser = userRepository.findByEmail(request.getEmail());
+        // If user exists by email
+        if (existingEmailUser.isPresent()) {
+            // If email is already verified with a different username
+            if (existingEmailUser.get().getEmailVerified() &&
+                    !existingEmailUser.get().getUsername().equals(request.getUsername())) {
+                throw new UserAuthenticationException("Email already registered and verified");
+            }
 
-        // If user exists and is already verified, throw an exception
-        if (existingUser.isPresent() && existingUser.get().getEmailVerified()) {
-            throw new UserAuthenticationException("Email already registered and verified");
-        }
-
-        User user;
-        // If user exists but not verified, update their details
-        if (existingUser.isPresent()) {
-            user = existingUser.get();
+            // If email exists but is not verified, update the existing user
+            user = existingEmailUser.get();
             log.info("Updating existing unverified user: {}", user.getEmail());
         } else {
             // Create a new user
@@ -105,6 +112,7 @@ public class AuthService {
         String accessToken = jwtUtil.generateToken((UserDetails) user);
         String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
 
+        // Return response with tokens since email is verified
         return AuthResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
@@ -139,6 +147,7 @@ public class AuthService {
             String accessToken = jwtUtil.generateToken((UserDetails) user);
             String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
 
+            // Return response with tokens since login successfully
             return AuthResponse.builder()
                     .accessToken(accessToken)
                     .refreshToken(refreshToken)
