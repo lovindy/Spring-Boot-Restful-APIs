@@ -5,11 +5,13 @@ import com.example.springrestful.dto.LoginRequest;
 import com.example.springrestful.dto.UserRegistrationRequest;
 import com.example.springrestful.entity.User;
 import com.example.springrestful.exception.UserAuthenticationException;
+import com.example.springrestful.exception.VerificationResendLimitException;
 import com.example.springrestful.mapper.UserMapper;
 import com.example.springrestful.repository.UserRepository;
 import com.example.springrestful.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -21,12 +23,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 
 @RequiredArgsConstructor
 @Service
 @Slf4j
 public class AuthService {
+
+    @Value("${spring.mail.max.resend.attempts}")
+    private int maxResendAttempts;
+
+    @Value("${spring.mail.resend.limit.hours}")
+    private long resendLimitHours;
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -36,59 +46,63 @@ public class AuthService {
     // Register request
     @Transactional
     public AuthResponse register(UserRegistrationRequest request) {
-        // Check for an existing user by email
+        // Check for existing users by email and username
         Optional<User> existingEmailUser = userRepository.findByEmail(request.getEmail());
-
-        // Check for an existing user by username
         Optional<User> existingUsernameUser = userRepository.findByUsername(request.getUsername());
 
-        // If email is already registered (verified or not), throw an exception
+        // Validate unique email and username
         if (existingEmailUser.isPresent()) {
             throw new UserAuthenticationException("Email is already registered");
         }
 
-        // If username is already taken, throw an exception
         if (existingUsernameUser.isPresent()) {
             throw new UserAuthenticationException("Username already exists");
         }
 
-        // Create a new user since both email and username are unique
+        // Create a new user
         User user = UserMapper.toEntity(request);
-
-        // Encode password
         user.setPassword(passwordEncoder.encode(request.getPassword()));
 
-        // Generate new verification code
-        String verificationCode = emailService.generateVerificationCode();
+        // Generate verification code
+        String plainVerificationCode = emailService.generateVerificationCode();
+        String hashedVerificationCode = emailService.hashVerificationCode(plainVerificationCode);
 
         // Set verification details
-        user.setEmailVerificationCode(verificationCode);
+        user.setEmailVerificationCode(hashedVerificationCode);
         user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
         user.setEmailVerified(false);
 
         // Save the new user
         user = userRepository.save(user);
 
-        // Send verification code via email
-        emailService.sendVerificationCode(user.getEmail(), verificationCode);
+        // Send plain verification code via email
+        emailService.sendVerificationCode(user.getEmail(), plainVerificationCode);
 
-        // Return response without tokens since email is not verified
         return AuthResponse.builder()
                 .user(UserMapper.toResponse(user))
                 .build();
     }
 
-    // Verify code process
     @Transactional
-    public AuthResponse verifyEmail(String email, String verificationCode) {
+    public AuthResponse verifyEmail(String email, String providedVerificationCode) {
         // Find user by email
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UserAuthenticationException("User not found"));
 
-        // Check if verification code is correct and not expired
-        if (!verificationCode.equals(user.getEmailVerificationCode()) ||
-                user.getEmailVerificationCodeExpiry().isBefore(Instant.now())) {
-            throw new UserAuthenticationException("Invalid or expired verification code");
+        // Check if code is expired
+//        if (user.getEmailVerificationCodeExpiry().isBefore(Instant.from(LocalDateTime.now()))) {
+//            throw new UserAuthenticationException("Verification code has expired");
+//        }
+
+        if (user.getEmailVerificationCodeExpiry()
+                .isBefore(LocalDateTime.now().atZone(ZoneId.of("UTC")).toInstant())) {
+            throw new UserAuthenticationException("Verification code has expired");
+        }
+
+
+        // Verify the code using secure password matching
+        if (!passwordEncoder.matches(providedVerificationCode, user.getEmailVerificationCode())) {
+            throw new UserAuthenticationException("Invalid verification code");
         }
 
         // Mark email as verified
@@ -101,12 +115,82 @@ public class AuthService {
         String accessToken = jwtUtil.generateToken((UserDetails) user);
         String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
 
-        // Return response with tokens since email is verified
         return AuthResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .user(UserMapper.toResponse(user))
                 .build();
+    }
+
+    @Transactional
+    public AuthResponse resendVerificationCode(String email) {
+        log.info("Attempting to resend verification code for email: {}", email);
+
+        // Find user by email
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> {
+                    log.warn("Resend verification attempt for non-existent email: {}", email);
+                    return new UserAuthenticationException("User not found");
+                });
+
+        // Check if email is already verified
+        if (user.getEmailVerified()) {
+            log.warn("Resend verification attempt for already verified email: {}", email);
+            throw new UserAuthenticationException("Email is already verified");
+        }
+
+        // Check resend attempt limits
+        checkResendAttemptLimit(user);
+
+        // Generate new verification code
+        String plainVerificationCode = emailService.generateVerificationCode();
+        String hashedVerificationCode = emailService.hashVerificationCode(plainVerificationCode);
+
+        // Update verification details
+        user.setEmailVerificationCode(hashedVerificationCode);
+        user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
+
+        // Increment resend attempts
+        user.incrementVerificationResendAttempts();
+
+        // Save the updated user
+        userRepository.save(user);
+
+        // Send new verification code via email
+        emailService.sendVerificationCode(user.getEmail(), plainVerificationCode);
+
+        log.info("Verification code resent successfully for email: {}", email);
+        return AuthResponse.builder()
+                .user(UserMapper.toResponse(user))
+                .build();
+    }
+
+
+    private void checkResendAttemptLimit(User user) {
+        // If no previous attempts, allow resend
+        if (user.getVerificationResendCount() == null || user.getLastVerificationResendAttempt() == null) {
+            return;
+        }
+
+        // Check if we're within the limit period
+        LocalDateTime limitPeriodStart = LocalDateTime.now().minusHours(maxResendAttempts);
+
+        // If attempts are within the last hour
+        if (user.getLastVerificationResendAttempt().isAfter(limitPeriodStart)) {
+            // Check if max attempts reached
+            if (user.getVerificationResendCount() >= maxResendAttempts) {
+                LocalDateTime retryAfter = user.getLastVerificationResendAttempt().plusHours(maxResendAttempts);
+
+                log.warn("Verification resend limit reached for email: {}", user.getEmail());
+                throw new VerificationResendLimitException(
+                        "Maximum verification code resend attempts reached. Please try again later.",
+                        retryAfter
+                );
+            }
+        } else {
+            // If outside the limit period, reset the counter
+            user.resetVerificationResendAttempts();
+        }
     }
 
     // Login request
@@ -151,34 +235,5 @@ public class AuthService {
             log.error("Unexpected error during login for email: {}", request.getEmail(), e);
             throw new UserAuthenticationException("An error occurred during login");
         }
-    }
-
-    // Resend the 6-digit code request
-    @Transactional
-    public AuthResponse resendVerificationCode(String email) {
-        // Find user by email
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserAuthenticationException("User not found"));
-
-        // Check if email is already verified
-        if (user.getEmailVerified()) {
-            throw new UserAuthenticationException("Email is already verified");
-        }
-
-        // Generate new verification code
-        String verificationCode = emailService.generateVerificationCode();
-
-        // Update verification details
-        user.setEmailVerificationCode(verificationCode);
-        user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
-        userRepository.save(user);
-
-        // Send new verification code via email
-        emailService.sendVerificationCode(user.getEmail(), verificationCode);
-
-        // Return user response without tokens
-        return AuthResponse.builder()
-                .user(UserMapper.toResponse(user))
-                .build();
     }
 }
