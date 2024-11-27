@@ -16,6 +16,7 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -83,6 +84,7 @@ public class AuthService {
                 .build();
     }
 
+    // Verification process
     @Transactional
     public AuthResponse verifyEmail(String email, String providedVerificationCode) {
         // Find user by email
@@ -90,10 +92,6 @@ public class AuthService {
                 .orElseThrow(() -> new UserAuthenticationException("User not found"));
 
         // Check if code is expired
-//        if (user.getEmailVerificationCodeExpiry().isBefore(Instant.from(LocalDateTime.now()))) {
-//            throw new UserAuthenticationException("Verification code has expired");
-//        }
-
         if (user.getEmailVerificationCodeExpiry()
                 .isBefore(LocalDateTime.now().atZone(ZoneId.of("UTC")).toInstant())) {
             throw new UserAuthenticationException("Verification code has expired");
@@ -122,6 +120,7 @@ public class AuthService {
                 .build();
     }
 
+    // Resend verification code process
     @Transactional
     public AuthResponse resendVerificationCode(String email) {
         log.info("Attempting to resend verification code for email: {}", email);
@@ -165,7 +164,7 @@ public class AuthService {
                 .build();
     }
 
-
+    // Check the resend attempts limit
     private void checkResendAttemptLimit(User user) {
         // If no previous attempts, allow resend
         if (user.getVerificationResendCount() == null || user.getLastVerificationResendAttempt() == null) {
@@ -173,7 +172,7 @@ public class AuthService {
         }
 
         // Check if we're within the limit period
-        LocalDateTime limitPeriodStart = LocalDateTime.now().minusHours(maxResendAttempts);
+        LocalDateTime limitPeriodStart = LocalDateTime.now().minusHours(resendLimitHours);
 
         // If attempts are within the last hour
         if (user.getLastVerificationResendAttempt().isAfter(limitPeriodStart)) {
@@ -193,7 +192,8 @@ public class AuthService {
         }
     }
 
-    // Login request
+    // Login logic
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         try {
             log.debug("Attempting login for email: {}", request.getEmail());
@@ -208,18 +208,20 @@ public class AuthService {
             }
 
             // Attempt authentication
-            authenticationManager.authenticate(
+            Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             request.getEmail(),
                             request.getPassword()
                     )
             );
 
+            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+
             log.debug("Authentication successful for email: {}", request.getEmail());
 
             // Generate tokens
-            String accessToken = jwtUtil.generateToken((UserDetails) user);
-            String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
+            String accessToken = jwtUtil.generateToken(userDetails);
+            String refreshToken = jwtUtil.generateRefreshToken(userDetails);
 
             // Return response with tokens since login successfully
             return AuthResponse.builder()
