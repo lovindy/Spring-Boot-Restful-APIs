@@ -172,7 +172,7 @@ public class AuthService {
         }
 
         // Check if we're within the limit period
-        LocalDateTime limitPeriodStart = LocalDateTime.now().minusHours(maxResendAttempts);
+        LocalDateTime limitPeriodStart = LocalDateTime.now().minusHours(resendLimitHours);
 
         // If attempts are within the last hour
         if (user.getLastVerificationResendAttempt().isAfter(limitPeriodStart)) {
