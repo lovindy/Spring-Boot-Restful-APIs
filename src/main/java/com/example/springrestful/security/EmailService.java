@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessagePreparator;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -15,17 +15,36 @@ import java.security.SecureRandom;
 @Slf4j
 public class EmailService {
 
+    private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
 
     @Value("${spring.mail.username}")
     private String fromEmail;
 
+    /**
+     * Generate a secure 6-digit verification code
+     *
+     * @return Plain text 6-digit verification code
+     */
     public String generateVerificationCode() {
         SecureRandom random = new SecureRandom();
         int code = 100000 + random.nextInt(900000);
         return String.valueOf(code);
     }
 
+    /**
+     * Hash the verification code using BCrypt
+     *
+     * @param plainCode Plain text verification code
+     * @return Hashed verification code
+     */
+    public String hashVerificationCode(String plainCode) {
+        return passwordEncoder.encode(plainCode);
+    }
+
+    /**
+     * Send the verification to user via the registered email
+     */
     public void sendVerificationCode(String toEmail, String verificationCode) {
         try {
             // Extensive logging
