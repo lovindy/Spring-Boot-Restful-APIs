@@ -198,44 +198,50 @@ public class AuthService {
         try {
             log.debug("Attempting login for email: {}", request.getEmail());
 
-            // Find user by email
+            // Find user by email and handle non-existing user specifically
             User user = userRepository.findByEmail(request.getEmail())
-                    .orElseThrow(() -> new UserAuthenticationException("User not found with email: " + request.getEmail()));
+                    .orElseThrow(() -> new UserAuthenticationException("No account found with this email address. Please check your email or register a new account."));
 
-            // Check if email is verified
+            // Check if email is verified - clear message for unverified emails
             if (!user.getEmailVerified()) {
-                throw new UserAuthenticationException("Email not verified");
+                throw new UserAuthenticationException("Email not verified. Please verify your email address before logging in.");
             }
 
             // Attempt authentication
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            request.getEmail(),
-                            request.getPassword()
-                    )
-            );
+            try {
+                Authentication authentication = authenticationManager.authenticate(
+                        new UsernamePasswordAuthenticationToken(
+                                request.getEmail(),
+                                request.getPassword()
+                        )
+                );
 
-            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+                UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-            log.debug("Authentication successful for email: {}", request.getEmail());
+                log.debug("Authentication successful for email: {}", request.getEmail());
 
-            // Generate tokens
-            String accessToken = jwtUtil.generateToken(userDetails);
-            String refreshToken = jwtUtil.generateRefreshToken(userDetails);
+                // Generate tokens
+                String accessToken = jwtUtil.generateToken(userDetails);
+                String refreshToken = jwtUtil.generateRefreshToken(userDetails);
 
-            // Return response with tokens since login successfully
-            return AuthResponse.builder()
-                    .accessToken(accessToken)
-                    .refreshToken(refreshToken)
-                    .user(UserMapper.toResponse(user))
-                    .build();
+                // Return response with tokens since login successfully
+                return AuthResponse.builder()
+                        .accessToken(accessToken)
+                        .refreshToken(refreshToken)
+                        .user(UserMapper.toResponse(user))
+                        .build();
 
-        } catch (BadCredentialsException e) {
-            log.error("Authentication failed for email: {}", request.getEmail());
-            throw new UserAuthenticationException("Invalid email or password");
+            } catch (BadCredentialsException e) {
+                log.error("Invalid password attempt for email: {}", request.getEmail());
+                throw new UserAuthenticationException("Incorrect password. Please check your password and try again.");
+            }
+
+        } catch (UserAuthenticationException e) {
+            // Re-throw UserAuthenticationException to preserve the specific message
+            throw e;
         } catch (Exception e) {
             log.error("Unexpected error during login for email: {}", request.getEmail(), e);
-            throw new UserAuthenticationException("An error occurred during login");
+            throw new UserAuthenticationException("Unable to process login request. Please try again later.");
         }
     }
 }
