@@ -23,36 +23,25 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(
-            @RequestBody @Valid UserRegistrationRequest request
-    ) {
+    public ResponseEntity<AuthResponse> register(@RequestBody @Valid UserRegistrationRequest request) {
         return ResponseEntity.ok(authService.register(request));
     }
 
     @PostMapping("/verify-email")
-    public ResponseEntity<AuthResponse> verifyEmail(
-            @RequestBody @Valid EmailVerificationRequest verificationRequest
-    ) {
-        return ResponseEntity.ok(
-                authService.verifyEmail(
-                        verificationRequest.getEmail(),
-                        verificationRequest.getVerificationCode()
-                )
-        );
+    public ResponseEntity<AuthResponse> verifyEmail(@RequestBody @Valid EmailVerificationRequest verificationRequest) {
+        return ResponseEntity.ok(authService.verifyEmail(verificationRequest.getEmail(), verificationRequest.getVerificationCode()));
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(
-            @RequestBody @Valid LoginRequest request
-    ) {
-        return ResponseEntity.ok(authService.login(request));
-    }
-
-    // Optional: Resend verification code endpoint
+    // Resend verification code endpoint
     @PostMapping("/resend-verification")
-    public ResponseEntity<AuthResponse> resendVerificationCode(
-            @Valid @RequestBody EmailResendVerificationRequest request) {
+    public ResponseEntity<AuthResponse> resendVerificationCode(@Valid @RequestBody EmailResendVerificationRequest request) {
         return ResponseEntity.ok(authService.resendVerificationCode(request.getEmail()));
+    }
+
+    // Login request
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request) {
+        return ResponseEntity.ok(authService.login(request));
     }
 
 //    @PostMapping("/refresh-token")
@@ -79,29 +68,4 @@ public class AuthController {
 //        return ResponseEntity.ok().build();
 //    }
 //
-//    @GetMapping("/verify-email")
-//    public ResponseEntity<String> verifyEmail(@RequestParam String token) {
-//        Optional<User> userOptional = UserRepository.findByEmailVerificationToken(token); // Use the instance here
-//
-//        if (userOptional.isPresent()) {
-//            User user = userOptional.get();
-//
-//            // Check if the token has expired
-//            if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
-//                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Verification link has expired.");
-//            }
-//
-//            // Set the email as verified and clear the verification token
-//            user.setEmailVerified(true);
-//            user.setEmailVerificationToken(null); // Clear the token after successful verification
-//            user.setEmailVerificationTokenExpiry(null); // Clear the expiry time
-//
-//            userRepository.save(user); // Save the updated user
-//
-//            return ResponseEntity.ok("Email successfully verified.");
-//        } else {
-//            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Invalid verification token.");
-//        }
-//    }
-
 }

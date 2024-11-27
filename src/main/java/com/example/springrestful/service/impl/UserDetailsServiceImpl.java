@@ -2,11 +2,13 @@ package com.example.springrestful.service.impl;
 
 import com.example.springrestful.entity.User;
 import com.example.springrestful.repository.UserRepository;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
-import java.util.ArrayList;
+
+import java.util.Collections;
 
 @Service
 public class UserDetailsServiceImpl implements UserDetailsService {
@@ -17,14 +19,18 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
         return new org.springframework.security.core.userdetails.User(
-                user.getUsername(),
+                user.getEmail(), // Use email instead of username
                 user.getPassword(),
-                new ArrayList<>()
+                user.getEmailVerified(), // Only allow verified users
+                true, // account non-expired
+                true, // credentials non-expired
+                true, // account non-locked
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
         );
     }
 }
