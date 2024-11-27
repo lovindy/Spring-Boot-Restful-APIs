@@ -5,11 +5,13 @@ import com.example.springrestful.dto.LoginRequest;
 import com.example.springrestful.dto.UserRegistrationRequest;
 import com.example.springrestful.entity.User;
 import com.example.springrestful.exception.UserAuthenticationException;
+import com.example.springrestful.exception.VerificationResendLimitException;
 import com.example.springrestful.mapper.UserMapper;
 import com.example.springrestful.repository.UserRepository;
 import com.example.springrestful.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -28,6 +30,13 @@ import java.util.Optional;
 @Service
 @Slf4j
 public class AuthService {
+
+    @Value("${spring.mail.max.resend.attempts}")
+    private int maxResendAttempts;
+
+    @Value("${spring.mail.resend.limit.hours}")
+    private long resendLimitHours;
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -115,14 +124,23 @@ public class AuthService {
 
     @Transactional
     public AuthResponse resendVerificationCode(String email) {
+        log.info("Attempting to resend verification code for email: {}", email);
+
         // Find user by email
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserAuthenticationException("User not found"));
+                .orElseThrow(() -> {
+                    log.warn("Resend verification attempt for non-existent email: {}", email);
+                    return new UserAuthenticationException("User not found");
+                });
 
         // Check if email is already verified
         if (user.getEmailVerified()) {
+            log.warn("Resend verification attempt for already verified email: {}", email);
             throw new UserAuthenticationException("Email is already verified");
         }
+
+        // Check resend attempt limits
+        checkResendAttemptLimit(user);
 
         // Generate new verification code
         String plainVerificationCode = emailService.generateVerificationCode();
@@ -131,14 +149,48 @@ public class AuthService {
         // Update verification details
         user.setEmailVerificationCode(hashedVerificationCode);
         user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
+
+        // Increment resend attempts
+        user.incrementVerificationResendAttempts();
+
+        // Save the updated user
         userRepository.save(user);
 
         // Send new verification code via email
         emailService.sendVerificationCode(user.getEmail(), plainVerificationCode);
 
+        log.info("Verification code resent successfully for email: {}", email);
         return AuthResponse.builder()
                 .user(UserMapper.toResponse(user))
                 .build();
+    }
+
+
+    private void checkResendAttemptLimit(User user) {
+        // If no previous attempts, allow resend
+        if (user.getVerificationResendCount() == null || user.getLastVerificationResendAttempt() == null) {
+            return;
+        }
+
+        // Check if we're within the limit period
+        LocalDateTime limitPeriodStart = LocalDateTime.now().minusHours(maxResendAttempts);
+
+        // If attempts are within the last hour
+        if (user.getLastVerificationResendAttempt().isAfter(limitPeriodStart)) {
+            // Check if max attempts reached
+            if (user.getVerificationResendCount() >= maxResendAttempts) {
+                LocalDateTime retryAfter = user.getLastVerificationResendAttempt().plusHours(maxResendAttempts);
+
+                log.warn("Verification resend limit reached for email: {}", user.getEmail());
+                throw new VerificationResendLimitException(
+                        "Maximum verification code resend attempts reached. Please try again later.",
+                        retryAfter
+                );
+            }
+        } else {
+            // If outside the limit period, reset the counter
+            user.resetVerificationResendAttempts();
+        }
     }
 
     // Login request

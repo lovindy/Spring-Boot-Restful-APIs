@@ -158,4 +158,22 @@ public class User implements UserDetails {
     public boolean getEmailVerified() {
         return this.emailVerified;
     }
+
+    @Column(name = "verification_resend_count")
+    private Integer verificationResendCount = 0;
+
+    @Column(name = "last_verification_resend_attempt")
+    private LocalDateTime lastVerificationResendAttempt;
+
+    // Method to reset resend count
+    public void resetVerificationResendAttempts() {
+        this.verificationResendCount = 0;
+        this.lastVerificationResendAttempt = null;
+    }
+
+    // Method to increment resend count
+    public void incrementVerificationResendAttempts() {
+        this.verificationResendCount = (this.verificationResendCount == null ? 0 : this.verificationResendCount) + 1;
+        this.lastVerificationResendAttempt = LocalDateTime.now();
+    }
 }
