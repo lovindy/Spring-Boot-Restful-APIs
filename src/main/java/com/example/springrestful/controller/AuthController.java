@@ -22,6 +22,7 @@ public class AuthController {
 
     private final AuthService authService;
 
+
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@RequestBody @Valid UserRegistrationRequest request) {
         return ResponseEntity.ok(authService.register(request));
@@ -32,16 +33,29 @@ public class AuthController {
         return ResponseEntity.ok(authService.verifyEmail(verificationRequest.getEmail(), verificationRequest.getVerificationCode()));
     }
 
-    // Resend verification code endpoint
     @PostMapping("/resend-verification")
     public ResponseEntity<AuthResponse> resendVerificationCode(@Valid @RequestBody EmailResendVerificationRequest request) {
         return ResponseEntity.ok(authService.resendVerificationCode(request.getEmail()));
     }
 
-    // Login request
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String token) {
+        authService.logout(token.substring(7)); // Remove "Bearer " prefix
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/refresh-token")
+    public ResponseEntity<AuthResponse> refreshToken(
+            @RequestHeader("Authorization") String refreshToken
+    ) {
+        // Remove "Bearer " prefix
+        refreshToken = refreshToken.substring(7);
+        return ResponseEntity.ok(authService.refreshToken(refreshToken));
     }
 
 //    @PostMapping("/refresh-token")

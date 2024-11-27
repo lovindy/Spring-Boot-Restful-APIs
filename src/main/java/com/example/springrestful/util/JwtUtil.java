@@ -5,7 +5,9 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -15,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 @Component
@@ -28,6 +31,15 @@ public class JwtUtil {
 
     @Value("${jwt.refresh-token.expiration}")
     private long refreshTokenExpiration;
+
+    private final RedisTemplate<String, String> redisTemplate;
+
+    @Value("${jwt.blacklist.prefix}")
+    private String blacklistPrefix;
+
+    public JwtUtil(RedisTemplate<String, String> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
 
     public String extractTokenFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
@@ -90,6 +102,26 @@ public class JwtUtil {
 
     public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+        return (username.equals(userDetails.getUsername()) &&
+                !isTokenExpired(token) &&
+                !isTokenBlacklisted(token));
+    }
+
+    public void invalidateToken(String token) {
+        // Extract the expiration time from the token
+        Date expiration = extractExpiration(token);
+        long ttl = Math.max((expiration.getTime() - System.currentTimeMillis()) / 1000, 0);
+
+        // Blacklist the token with its TTL
+        if (ttl > 0) {
+            String blacklistKey = blacklistPrefix + token;
+            redisTemplate.opsForValue().set(blacklistKey, "true", ttl, TimeUnit.SECONDS);
+        }
+    }
+
+    public boolean isTokenBlacklisted(String token) {
+        if (token == null) return false;
+        String blacklistKey = blacklistPrefix + token;
+        return Boolean.TRUE.toString().equals(redisTemplate.opsForValue().get(blacklistKey));
     }
 }

@@ -8,6 +8,7 @@ import com.example.springrestful.exception.UserAuthenticationException;
 import com.example.springrestful.exception.VerificationResendLimitException;
 import com.example.springrestful.mapper.UserMapper;
 import com.example.springrestful.repository.UserRepository;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import com.example.springrestful.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,7 @@ public class AuthService {
     @Value("${spring.mail.resend.limit.hours}")
     private long resendLimitHours;
 
+    private final UserDetailsService userDetailsService;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -242,6 +244,60 @@ public class AuthService {
         } catch (Exception e) {
             log.error("Unexpected error during login for email: {}", request.getEmail(), e);
             throw new UserAuthenticationException("Unable to process login request. Please try again later.");
+        }
+    }
+
+    // Logout method
+    public void logout(String token) {
+        try {
+            // Delegate token invalidation to JwtUtil
+            jwtUtil.invalidateToken(token);
+
+            // Optional: Additional logout logic can be added here
+            log.info("User logged out successfully");
+        } catch (Exception e) {
+            log.error("Logout failed", e);
+            // Optionally throw a specific exception or handle as needed
+        }
+    }
+
+    @Transactional
+    public AuthResponse refreshToken(String refreshToken) {
+        try {
+            // Validate the refresh token
+            if (jwtUtil.isTokenBlacklisted(refreshToken)) {
+                log.warn("Attempt to use blacklisted refresh token");
+                throw new UserAuthenticationException("Invalid refresh token");
+            }
+
+            // Extract username from refresh token
+            String username = jwtUtil.extractUsername(refreshToken);
+
+            // Load user details
+            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
+            // Validate the token
+            if (jwtUtil.validateToken(refreshToken, userDetails)) {
+                // Invalidate the old refresh token
+                jwtUtil.invalidateToken(refreshToken);
+
+                // Generate new tokens
+                String newAccessToken = jwtUtil.generateToken(userDetails);
+                String newRefreshToken = jwtUtil.generateRefreshToken(userDetails);
+
+                // Return new tokens
+                User user = (User) userDetails;
+                return AuthResponse.builder()
+                        .accessToken(newAccessToken)
+                        .refreshToken(newRefreshToken)
+                        .user(UserMapper.toResponse(user))
+                        .build();
+            } else {
+                throw new UserAuthenticationException("Invalid refresh token");
+            }
+        } catch (Exception e) {
+            log.error("Token refresh failed", e);
+            throw new UserAuthenticationException("Token refresh failed");
         }
     }
 }
