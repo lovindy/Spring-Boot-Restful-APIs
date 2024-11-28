@@ -126,10 +126,13 @@ public class JwtUtil {
 
     // Invalidate a token by adding it to the Redis blacklist
     public void invalidateToken(String token) {
-        // Use the configured TTL for the blacklist
-        long finalTtl = blacklistTtlSeconds;
+        Date expiration = extractExpiration(token);
+        long remainingTtl = Math.max((expiration.getTime() - System.currentTimeMillis()) / 1000, 0);
 
-        // Blacklist the token in Redis with the configured TTL
+        // Use the configured TTL, but don't exceed the token's remaining lifetime
+        long finalTtl = Math.min(remainingTtl, blacklistTtlSeconds);
+
+        // Blacklist the token in Redis with its original TTL
         if (finalTtl > 0) {
             String blacklistKey = blacklistPrefix + token;
             redisTemplate.opsForValue().set(blacklistKey, "true", finalTtl, TimeUnit.SECONDS);
