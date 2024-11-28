@@ -274,112 +274,150 @@ public class AuthService {
         }
     }
 
+    /**
+     * Login method
+     */
     @Transactional
     public AuthResponse login(LoginRequest request) {
         try {
-            log.debug("Processing login request for: {}", request.getEmail());
+            log.info("🔍 Starting login process for email: {}", request.getEmail());
 
             User user = userRepository.findByEmail(request.getEmail())
                     .orElseThrow(() -> {
-                        log.warn("Login failed: No account found for email - {}", request.getEmail());
-                        return new UserAuthenticationException("No account found with this email address");
+                        log.warn("❌ Login failed: No account found for email: {}", request.getEmail());
+                        return new UserAuthenticationException(
+                                "No account found with this email address."
+                        );
                     });
 
             if (!user.getEmailVerified()) {
-                log.warn("Login failed: Email not verified - {}", request.getEmail());
-                throw new UserAuthenticationException("Email not verified. Please verify your email address before logging in.");
-            }
-
-            try {
-                Authentication authentication = authenticationManager.authenticate(
-                        new UsernamePasswordAuthenticationToken(
-                                request.getEmail(),
-                                request.getPassword()
-                        )
+                log.warn("⚠️ Login failed: Email not verified for: {}", request.getEmail());
+                throw new UserAuthenticationException(
+                        "Email not verified. Please verify your email address before logging in."
                 );
-
-                UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-
-                // Invalidate all previous sessions
-                jwtUtil.invalidateAllUserSessions(userDetails.getUsername());
-
-                // Generate new tokens
-                String accessToken = jwtUtil.generateToken(userDetails);
-                String refreshToken = jwtUtil.generateRefreshToken(userDetails);
-
-                log.info("Login successful for email: {}", request.getEmail());
-                return AuthResponse.builder()
-                        .accessToken(accessToken)
-                        .refreshToken(refreshToken)
-                        .user(UserMapper.toResponse(user))
-                        .build();
-
-            } catch (BadCredentialsException e) {
-                log.warn("Login failed: Invalid credentials for email - {}", request.getEmail());
-                throw new UserAuthenticationException("Invalid credentials");
             }
 
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()
+                    )
+            );
+
+            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+
+            // Invalidate all previous sessions
+            jwtUtil.invalidateAllUserSessions(userDetails.getUsername());
+
+            // Generate new tokens
+            String accessToken = jwtUtil.generateToken(userDetails);
+            String refreshToken = jwtUtil.generateRefreshToken(userDetails);
+
+            log.info("✅ Login successful for email: {}", request.getEmail());
+
+            return AuthResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .user(UserMapper.toResponse(user))
+                    .message("Login successful!")
+                    .build();
+
+        } catch (BadCredentialsException e) {
+            log.warn("❌ Login failed: Invalid credentials for email: {}", request.getEmail());
+            throw new UserAuthenticationException("Invalid credentials. Please check and try again.");
         } catch (UserAuthenticationException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Login error for email: {}", request.getEmail(), e);
-            throw new UserAuthenticationException("Login failed. Please try again later.");
+            log.error("💥 Unexpected error during login for email: {}", request.getEmail(), e);
+            throw new UserAuthenticationException(
+                    "We encountered an unexpected error during login. Please try again later."
+            );
         }
     }
 
+    /**
+     * Logout method
+     */
     public AuthResponse logout(String token) {
         try {
-            log.debug("Processing logout request");
+            log.info("🔒 Starting logout process.");
 
             String username = jwtUtil.extractUsername(token);
             jwtUtil.invalidateAllUserSessions(username);
             jwtUtil.invalidateToken(token);
 
-            log.info("Logout successful for user: {}", username);
+            log.info("✅ Logout successful for user: {}", username);
+
             return AuthResponse.builder()
-                    .message("Logged out successfully")
+                    .message("Logout successful!")
                     .build();
         } catch (Exception e) {
-            log.error("Logout failed", e);
-            throw new UserAuthenticationException("Logout failed. Please try again later.");
+            log.error("💥 Unexpected error during logout", e);
+            throw new UserAuthenticationException(
+                    "An error occurred during logout. Please try again later."
+            );
         }
     }
 
+    /**
+     * Handles the refresh token process, generating new access and refresh tokens.
+     *
+     * @param refreshToken The refresh token provided by the client
+     * @return AuthResponse containing new tokens and user information
+     */
     @Transactional
     public AuthResponse refreshToken(String refreshToken) {
         try {
-            log.debug("Processing token refresh request");
+            log.info("🔄 Starting token refresh process.");
 
+            // Check if the token is blacklisted
             if (jwtUtil.isTokenBlacklisted(refreshToken)) {
-                log.warn("Token refresh failed: Token is blacklisted");
-                throw new UserAuthenticationException("Invalid refresh token");
+                log.warn("❌ Token refresh failed: Provided refresh token is blacklisted.");
+                throw new UserAuthenticationException(
+                        "Invalid refresh token. Please login again."
+                );
             }
 
+            // Extract the username from the token
             String username = jwtUtil.extractUsername(refreshToken);
+            log.debug("🔍 Extracted username from refresh token: {}", username);
+
+            // Load user details
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-            if (jwtUtil.validateToken(refreshToken, userDetails)) {
-                jwtUtil.invalidateToken(refreshToken);
-
-                String newAccessToken = jwtUtil.generateToken(userDetails);
-                String newRefreshToken = jwtUtil.generateRefreshToken(userDetails);
-
-                User user = (User) userDetails;
-                log.info("Token refresh successful for user: {}", username);
-                return AuthResponse.builder()
-                        .accessToken(newAccessToken)
-                        .refreshToken(newRefreshToken)
-                        .user(UserMapper.toResponse(user))
-                        .build();
-            } else {
-                log.warn("Token refresh failed: Invalid token for user - {}", username);
-                throw new UserAuthenticationException("Invalid refresh token");
+            // Validate the token
+            if (!jwtUtil.validateToken(refreshToken, userDetails)) {
+                log.warn("❌ Token refresh failed: Invalid token for user: {}", username);
+                throw new UserAuthenticationException(
+                        "Invalid refresh token. Please login again."
+                );
             }
+
+            // Invalidate the old refresh token
+            jwtUtil.invalidateToken(refreshToken);
+
+            // Generate new tokens
+            String newAccessToken = jwtUtil.generateToken(userDetails);
+            String newRefreshToken = jwtUtil.generateRefreshToken(userDetails);
+
+            User user = (User) userDetails;
+
+            log.info("✅ Token refresh successful for user: {}", username);
+
+            return AuthResponse.builder()
+                    .accessToken(newAccessToken)
+                    .refreshToken(newRefreshToken)
+                    .user(UserMapper.toResponse(user))
+                    .message("Token refreshed successfully.")
+                    .build();
+
         } catch (UserAuthenticationException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Token refresh failed", e);
-            throw new UserAuthenticationException("Token refresh failed. Please try again later.");
+            log.error("💥 Unexpected error during token refresh.", e);
+            throw new UserAuthenticationException(
+                    "An error occurred during token refresh. Please try again later."
+            );
         }
     }
 }
