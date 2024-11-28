@@ -36,6 +36,9 @@ public class JwtUtil {
     @Value("${jwt.blacklist.prefix}")
     private String blacklistPrefix;
 
+    @Value("${jwt.blacklist.ttl.seconds}")
+    private long blacklistTtlSeconds;
+
     // Redis template for token blacklisting
     private final RedisTemplate<String, String> redisTemplate;
 
@@ -123,16 +126,16 @@ public class JwtUtil {
 
     // Invalidate a token by adding it to the Redis blacklist
     public void invalidateToken(String token) {
-        // Calculate the remaining time-to-live (TTL) for the token
-        Date expiration = extractExpiration(token);
-        long ttl = Math.max((expiration.getTime() - System.currentTimeMillis()) / 1000, 0);
+        // Use the configured TTL for the blacklist
+        long finalTtl = blacklistTtlSeconds;
 
-        // Blacklist the token in Redis with its original TTL
-        if (ttl > 0) {
+        // Blacklist the token in Redis with the configured TTL
+        if (finalTtl > 0) {
             String blacklistKey = blacklistPrefix + token;
-            redisTemplate.opsForValue().set(blacklistKey, "true", ttl, TimeUnit.SECONDS);
+            redisTemplate.opsForValue().set(blacklistKey, "true", finalTtl, TimeUnit.SECONDS);
         }
     }
+
 
     // Check if a token is blacklisted in Redis
     public boolean isTokenBlacklisted(String token) {
