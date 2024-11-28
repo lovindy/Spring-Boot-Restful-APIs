@@ -8,25 +8,25 @@ import com.example.springrestful.exception.UserAuthenticationException;
 import com.example.springrestful.exception.VerificationResendLimitException;
 import com.example.springrestful.mapper.UserMapper;
 import com.example.springrestful.repository.UserRepository;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import com.example.springrestful.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 @RequiredArgsConstructor
 @Service
@@ -39,21 +39,26 @@ public class AuthService {
     @Value("${spring.mail.resend.limit.hours}")
     private long resendLimitHours;
 
+    @Value("${verification.code.expiry.minutes}")
+    private long verificationCodeExpiryMinutes;
+
     private final UserDetailsService userDetailsService;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final EmailService emailService;
+    private final RedisTemplate<String, String> redisTemplate;
 
-    // Register request
+    private static final String VERIFICATION_CODE_PREFIX = "verification:";
+    private static final String VERIFICATION_ATTEMPTS_PREFIX = "verification_attempts:";
+
     @Transactional
     public AuthResponse register(UserRegistrationRequest request) {
-        // Check for existing users by email and username
+        // Validation checks
         Optional<User> existingEmailUser = userRepository.findByEmail(request.getEmail());
         Optional<User> existingUsernameUser = userRepository.findByUsername(request.getUsername());
 
-        // Validate unique email and username
         if (existingEmailUser.isPresent()) {
             throw new UserAuthenticationException("Email is already registered");
         }
@@ -62,23 +67,26 @@ public class AuthService {
             throw new UserAuthenticationException("Username already exists");
         }
 
-        // Create a new user
+        // Create new user
         User user = UserMapper.toEntity(request);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
 
-        // Generate verification code
+        // Generate and store verification code in Redis
         String plainVerificationCode = emailService.generateVerificationCode();
         String hashedVerificationCode = emailService.hashVerificationCode(plainVerificationCode);
 
-        // Set verification details
-        user.setEmailVerificationCode(hashedVerificationCode);
-        user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
-        user.setEmailVerified(false);
+        String verificationKey = VERIFICATION_CODE_PREFIX + request.getEmail();
+        redisTemplate.opsForValue().set(
+                verificationKey,
+                hashedVerificationCode,
+                verificationCodeExpiryMinutes,
+                TimeUnit.MINUTES
+        );
 
-        // Save the new user
+        user.setEmailVerified(false);
         user = userRepository.save(user);
 
-        // Send plain verification code via email
+        // Send verification email
         emailService.sendVerificationCode(user.getEmail(), plainVerificationCode);
 
         return AuthResponse.builder()
@@ -86,34 +94,31 @@ public class AuthService {
                 .build();
     }
 
-    // Verification process
     @Transactional
     public AuthResponse verifyEmail(String email, String providedVerificationCode) {
-        // Find user by email
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UserAuthenticationException("User not found"));
 
-        // Check if code is expired
-        if (user.getEmailVerificationCodeExpiry()
-                .isBefore(LocalDateTime.now().atZone(ZoneId.of("UTC")).toInstant())) {
+        String verificationKey = VERIFICATION_CODE_PREFIX + email;
+        String storedHashedCode = redisTemplate.opsForValue().get(verificationKey);
+
+        if (storedHashedCode == null) {
             throw new UserAuthenticationException("Verification code has expired");
         }
 
-
-        // Verify the code using secure password matching
-        if (!passwordEncoder.matches(providedVerificationCode, user.getEmailVerificationCode())) {
+        if (!passwordEncoder.matches(providedVerificationCode, storedHashedCode)) {
             throw new UserAuthenticationException("Invalid verification code");
         }
 
-        // Mark email as verified
+        // Mark email as verified and clean up Redis
         user.setEmailVerified(true);
-        user.setEmailVerificationCode(null);
-        user.setEmailVerificationCodeExpiry(null);
         userRepository.save(user);
+        redisTemplate.delete(verificationKey);
+        redisTemplate.delete(VERIFICATION_ATTEMPTS_PREFIX + email);
 
         // Generate tokens
-        String accessToken = jwtUtil.generateToken((UserDetails) user);
-        String refreshToken = jwtUtil.generateRefreshToken((UserDetails) user);
+        String accessToken = jwtUtil.generateToken(user);
+        String refreshToken = jwtUtil.generateRefreshToken(user);
 
         return AuthResponse.builder()
                 .accessToken(accessToken)
@@ -122,43 +127,44 @@ public class AuthService {
                 .build();
     }
 
-    // Resend verification code process
     @Transactional
     public AuthResponse resendVerificationCode(String email) {
         log.info("Attempting to resend verification code for email: {}", email);
 
-        // Find user by email
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> {
-                    log.warn("Resend verification attempt for non-existent email: {}", email);
-                    return new UserAuthenticationException("User not found");
-                });
+                .orElseThrow(() -> new UserAuthenticationException("User not found"));
 
-        // Check if email is already verified
         if (user.getEmailVerified()) {
-            log.warn("Resend verification attempt for already verified email: {}", email);
             throw new UserAuthenticationException("Email is already verified");
         }
 
-        // Check resend attempt limits
-        checkResendAttemptLimit(user);
+        String attemptsKey = VERIFICATION_ATTEMPTS_PREFIX + email;
+        Long attempts = redisTemplate.opsForValue().increment(attemptsKey);
 
-        // Generate new verification code
+        if (attempts == 1) {
+            redisTemplate.expire(attemptsKey, resendLimitHours, TimeUnit.HOURS);
+        }
+
+        if (attempts > maxResendAttempts) {
+            throw new VerificationResendLimitException(
+                    "Maximum verification code resend attempts reached. Please try again later.",
+                    LocalDateTime.now().plusHours(resendLimitHours)
+            );
+        }
+
+        // Generate and store new verification code
         String plainVerificationCode = emailService.generateVerificationCode();
         String hashedVerificationCode = emailService.hashVerificationCode(plainVerificationCode);
 
-        // Update verification details
-        user.setEmailVerificationCode(hashedVerificationCode);
-        user.setEmailVerificationCodeExpiry(LocalDateTime.now().plusMinutes(10));
+        String verificationKey = VERIFICATION_CODE_PREFIX + email;
+        redisTemplate.opsForValue().set(
+                verificationKey,
+                hashedVerificationCode,
+                verificationCodeExpiryMinutes,
+                TimeUnit.MINUTES
+        );
 
-        // Increment resend attempts
-        user.incrementVerificationResendAttempts();
-
-        // Save the updated user
-        userRepository.save(user);
-
-        // Send new verification code via email
-        emailService.sendVerificationCode(user.getEmail(), plainVerificationCode);
+        emailService.sendVerificationCode(email, plainVerificationCode);
 
         log.info("Verification code resent successfully for email: {}", email);
         return AuthResponse.builder()
@@ -166,131 +172,79 @@ public class AuthService {
                 .build();
     }
 
-    // Check the resend attempts limit
-    private void checkResendAttemptLimit(User user) {
-        // If no previous attempts, allow resend
-        if (user.getVerificationResendCount() == null || user.getLastVerificationResendAttempt() == null) {
-            return;
-        }
-
-        // Check if we're within the limit period
-        LocalDateTime limitPeriodStart = LocalDateTime.now().minusHours(resendLimitHours);
-
-        // If attempts are within the last hour
-        if (user.getLastVerificationResendAttempt().isAfter(limitPeriodStart)) {
-            // Check if max attempts reached
-            if (user.getVerificationResendCount() >= maxResendAttempts) {
-                LocalDateTime retryAfter = user.getLastVerificationResendAttempt().plusHours(maxResendAttempts);
-
-                log.warn("Verification resend limit reached for email: {}", user.getEmail());
-                throw new VerificationResendLimitException(
-                        "Maximum verification code resend attempts reached. Please try again later.",
-                        retryAfter
-                );
-            }
-        } else {
-            // If outside the limit period, reset the counter
-            user.resetVerificationResendAttempts();
-        }
-    }
-
-    // Login logic
     @Transactional
     public AuthResponse login(LoginRequest request) {
         try {
             log.debug("Attempting login for email: {}", request.getEmail());
 
-            // Find user by email and handle non-existing user specifically
             User user = userRepository.findByEmail(request.getEmail())
-                    .orElseThrow(() -> new UserAuthenticationException("No account found with this email address. Please check your email or register a new account."));
+                    .orElseThrow(() -> new UserAuthenticationException("No account found with this email address"));
 
-            // Check if email is verified - clear message for unverified emails
             if (!user.getEmailVerified()) {
                 throw new UserAuthenticationException("Email not verified. Please verify your email address before logging in.");
             }
 
-            // Attempt authentication
-            try {
-                Authentication authentication = authenticationManager.authenticate(
-                        new UsernamePasswordAuthenticationToken(
-                                request.getEmail(),
-                                request.getPassword()
-                        )
-                );
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()
+                    )
+            );
 
-                UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-                log.debug("Authentication successful for email: {}", request.getEmail());
+            // Invalidate all previous sessions for this user
+            jwtUtil.invalidateAllUserSessions(userDetails.getUsername());
 
-                // Generate tokens
-                String accessToken = jwtUtil.generateToken(userDetails);
-                String refreshToken = jwtUtil.generateRefreshToken(userDetails);
+            // Generate new tokens
+            String accessToken = jwtUtil.generateToken(userDetails);
+            String refreshToken = jwtUtil.generateRefreshToken(userDetails);
 
-                // Return response with tokens since login successfully
-                return AuthResponse.builder()
-                        .accessToken(accessToken)
-                        .refreshToken(refreshToken)
-                        .user(UserMapper.toResponse(user))
-                        .build();
+            return AuthResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .user(UserMapper.toResponse(user))
+                    .build();
 
-            } catch (BadCredentialsException e) {
-                log.error("Invalid password attempt for email: {}", request.getEmail());
-                throw new UserAuthenticationException("Incorrect password. Please check your password and try again.");
-            }
-
-        } catch (UserAuthenticationException e) {
-            // Re-throw UserAuthenticationException to preserve the specific message
-            throw e;
+        } catch (BadCredentialsException e) {
+            throw new UserAuthenticationException("Invalid credentials");
         } catch (Exception e) {
-            log.error("Unexpected error during login for email: {}", request.getEmail(), e);
-            throw new UserAuthenticationException("Unable to process login request. Please try again later.");
+            log.error("Login error", e);
+            throw new UserAuthenticationException("Login failed");
         }
     }
 
-
     public AuthResponse logout(String token) {
         try {
-            // Invalidate the token in Redis
+            String username = jwtUtil.extractUsername(token);
+            jwtUtil.invalidateAllUserSessions(username);
             jwtUtil.invalidateToken(token);
 
-            log.info("User logged out successfully");
-
-            // Return a response with a success message
             return AuthResponse.builder()
                     .message("Logged out successfully")
                     .build();
         } catch (Exception e) {
             log.error("Logout failed", e);
-            throw new UserAuthenticationException("Logout failed. Please try again.");
+            throw new UserAuthenticationException("Logout failed");
         }
     }
-
 
     @Transactional
     public AuthResponse refreshToken(String refreshToken) {
         try {
-            // Validate the refresh token
             if (jwtUtil.isTokenBlacklisted(refreshToken)) {
-                log.warn("Attempt to use blacklisted refresh token");
                 throw new UserAuthenticationException("Invalid refresh token");
             }
 
-            // Extract username from refresh token
             String username = jwtUtil.extractUsername(refreshToken);
-
-            // Load user details
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-            // Validate the token
             if (jwtUtil.validateToken(refreshToken, userDetails)) {
-                // Invalidate the old refresh token
                 jwtUtil.invalidateToken(refreshToken);
 
-                // Generate new tokens
                 String newAccessToken = jwtUtil.generateToken(userDetails);
                 String newRefreshToken = jwtUtil.generateRefreshToken(userDetails);
 
-                // Return new tokens
                 User user = (User) userDetails;
                 return AuthResponse.builder()
                         .accessToken(newAccessToken)

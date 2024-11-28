@@ -5,7 +5,6 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -23,7 +22,6 @@ import java.util.function.Function;
 @Component
 public class JwtUtil {
 
-    // Configuration properties for JWT generation and validation
     @Value("${jwt.secret}")
     private String secret;
 
@@ -33,22 +31,19 @@ public class JwtUtil {
     @Value("${jwt.refresh-token.expiration}")
     private long refreshTokenExpiration;
 
-    @Value("${jwt.blacklist.prefix}")
+    @Value("${jwt.redis.prefix.blacklist}")
     private String blacklistPrefix;
 
-    @Value("${jwt.blacklist.ttl.seconds}")
-    private long blacklistTtlSeconds;
+    @Value("${jwt.redis.prefix.user-sessions}")
+    private String userSessionsPrefix;
 
-    // Redis template for token blacklisting
     private final RedisTemplate<String, String> redisTemplate;
 
     public JwtUtil(RedisTemplate<String, String> redisTemplate) {
         this.redisTemplate = redisTemplate;
     }
 
-    // Extract token from Authorization header
     public String extractTokenFromRequest(HttpServletRequest request) {
-        // Check for valid Bearer token
         String bearerToken = request.getHeader("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
@@ -56,14 +51,11 @@ public class JwtUtil {
         return null;
     }
 
-    // Create a secure signing key using the secret
     private SecretKey getSigningKey() {
-        // Convert secret to bytes and generate HMAC SHA key
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    // Extract specific claims from the token
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
@@ -72,13 +64,11 @@ public class JwtUtil {
         return extractClaim(token, Claims::getExpiration);
     }
 
-    // Generic method to extract any claim from the token
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
-    // Parse and extract all claims from the token
     private Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
@@ -87,25 +77,25 @@ public class JwtUtil {
                 .getBody();
     }
 
-    // Check if the token has expired
     private Boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }
 
-    // Generate access token for a user
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
-        return createToken(claims, userDetails.getUsername(), accessTokenExpiration);
+        String token = createToken(claims, userDetails.getUsername(), accessTokenExpiration);
+        storeUserSession(userDetails.getUsername(), token, accessTokenExpiration);
+        return token;
     }
 
-    // Generate refresh token for a user
     public String generateRefreshToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("tokenType", "refresh");
-        return createToken(claims, userDetails.getUsername(), refreshTokenExpiration);
+        String token = createToken(claims, userDetails.getUsername(), refreshTokenExpiration);
+        storeUserSession(userDetails.getUsername(), token, refreshTokenExpiration);
+        return token;
     }
 
-    // Core token creation method
     private String createToken(Map<String, Object> claims, String subject, long expiration) {
         return Jwts.builder()
                 .setClaims(claims)
@@ -116,31 +106,46 @@ public class JwtUtil {
                 .compact();
     }
 
-    // Comprehensive token validation
+    private void storeUserSession(String username, String token, long expiration) {
+        String sessionKey = userSessionsPrefix + username;
+        redisTemplate.opsForSet().add(sessionKey, token);
+        redisTemplate.expire(sessionKey, expiration, TimeUnit.MILLISECONDS);
+    }
+
     public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return (username.equals(userDetails.getUsername()) &&
                 !isTokenExpired(token) &&
-                !isTokenBlacklisted(token));
+                !isTokenBlacklisted(token) &&
+                isValidUserSession(username, token));
     }
 
-    // Invalidate a token by adding it to the Redis blacklist
+    private boolean isValidUserSession(String username, String token) {
+        String sessionKey = userSessionsPrefix + username;
+        return Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(sessionKey, token));
+    }
+
     public void invalidateToken(String token) {
+        if (token == null) return;
+
+        String username = extractUsername(token);
         Date expiration = extractExpiration(token);
-        long remainingTtl = Math.max((expiration.getTime() - System.currentTimeMillis()) / 1000, 0);
+        long remainingTtl = Math.max((expiration.getTime() - System.currentTimeMillis()), 0);
 
-        // Use the configured TTL, but don't exceed the token's remaining lifetime
-        long finalTtl = Math.min(remainingTtl, blacklistTtlSeconds);
+        // Add to blacklist
+        String blacklistKey = blacklistPrefix + token;
+        redisTemplate.opsForValue().set(blacklistKey, "true", remainingTtl, TimeUnit.MILLISECONDS);
 
-        // Blacklist the token in Redis with its original TTL
-        if (finalTtl > 0) {
-            String blacklistKey = blacklistPrefix + token;
-            redisTemplate.opsForValue().set(blacklistKey, "true", finalTtl, TimeUnit.SECONDS);
-        }
+        // Remove from user sessions
+        String sessionKey = userSessionsPrefix + username;
+        redisTemplate.opsForSet().remove(sessionKey, token);
     }
 
+    public void invalidateAllUserSessions(String username) {
+        String sessionKey = userSessionsPrefix + username;
+        redisTemplate.delete(sessionKey);
+    }
 
-    // Check if a token is blacklisted in Redis
     public boolean isTokenBlacklisted(String token) {
         if (token == null) return false;
         String blacklistKey = blacklistPrefix + token;

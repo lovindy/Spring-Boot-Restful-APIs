@@ -14,13 +14,25 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserDetailsService userDetailsService;
+
+    private static final List<String> PUBLIC_PATHS = Arrays.asList(
+            "/api/v1/auth/login",
+            "/api/v1/auth/register",
+            "/api/v1/auth/verify-email",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/resend-verification"
+    );
 
     @Override
     protected void doFilterInternal(
@@ -40,7 +52,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // Check if token is blacklisted
                 if (jwtUtil.isTokenBlacklisted(jwt)) {
                     logger.warn("Attempted to use blacklisted token");
-                    filterChain.doFilter(request, response);
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     return;
                 }
 
@@ -57,11 +69,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         );
                         authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                         SecurityContextHolder.getContext().setAuthentication(authToken);
+                    } else {
+                        // Token validation failed
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        return;
                     }
                 }
             }
         } catch (Exception e) {
-            logger.error("Error occurred in JWT filter: {}", e);
+            logger.error("Error occurred in JWT filter: " + e.getMessage(), e);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return;
         }
 
         filterChain.doFilter(request, response);
@@ -69,10 +87,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private boolean shouldSkipAuthentication(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.contains("/api/v1/auth/login") ||
-                path.contains("/api/v1/auth/register") ||
-                path.contains("/api/v1/auth/verify-email") ||
-                path.contains("/api/v1/auth/forgot-password") ||
-                path.contains("/api/v1/auth/reset-password");
+        return PUBLIC_PATHS.stream().anyMatch(path::contains);
     }
 }
