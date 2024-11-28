@@ -247,19 +247,24 @@ public class AuthService {
         }
     }
 
-    // Logout method
-    public void logout(String token) {
+
+    public AuthResponse logout(String token) {
         try {
-            // Delegate token invalidation to JwtUtil
+            // Invalidate the token in Redis
             jwtUtil.invalidateToken(token);
 
-            // Optional: Additional logout logic can be added here
             log.info("User logged out successfully");
+
+            // Return a response with a success message
+            return AuthResponse.builder()
+                    .message("Logged out successfully")
+                    .build();
         } catch (Exception e) {
             log.error("Logout failed", e);
-            // Optionally throw a specific exception or handle as needed
+            throw new UserAuthenticationException("Logout failed. Please try again.");
         }
     }
+
 
     @Transactional
     public AuthResponse refreshToken(String refreshToken) {

@@ -44,9 +44,9 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String token) {
-        authService.logout(token.substring(7)); // Remove "Bearer " prefix
-        return ResponseEntity.ok().build();
+    public ResponseEntity<AuthResponse> logout(@RequestHeader("Authorization") String token) {
+        AuthResponse response = authService.logout(token.substring(7)); // Remove "Bearer " prefix
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/refresh-token")
