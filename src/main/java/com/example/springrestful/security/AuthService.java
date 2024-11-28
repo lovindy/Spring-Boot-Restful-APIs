@@ -52,33 +52,52 @@ public class AuthService {
     private static final String VERIFICATION_CODE_PREFIX = "verification:";
     private static final String VERIFICATION_ATTEMPTS_PREFIX = "verification_attempts:";
 
+    /**
+     * Handles user registration process with email verification.
+     *
+     * @param request The registration request containing user details
+     * @return AuthResponse containing user information and registration status
+     */
     @Transactional
     public AuthResponse register(UserRegistrationRequest request) {
         try {
-            log.debug("Processing registration request for email: {}", request.getEmail());
+            log.info("📝 Starting registration process for email: {}", request.getEmail());
 
-            // Validation checks
+            // Check for existing email
             Optional<User> existingEmailUser = userRepository.findByEmail(request.getEmail());
-            Optional<User> existingUsernameUser = userRepository.findByUsername(request.getUsername());
-
             if (existingEmailUser.isPresent()) {
-                log.warn("Registration failed: Email already registered - {}", request.getEmail());
-                throw new UserAuthenticationException("Email is already registered");
+                User user = existingEmailUser.get();
+                if (!user.getEmailVerified()) {
+                    log.warn("❌ Registration attempt with unverified email: {}", request.getEmail());
+                    throw new UserAuthenticationException(
+                            "This email is already registered but not verified. Please check your email for the verification code or request a new one."
+                    );
+                }
+                log.warn("❌ Registration attempt with existing email: {}", request.getEmail());
+                throw new UserAuthenticationException(
+                        "This email address is already registered. Please use a different email or login to your existing account."
+                );
             }
 
+            // Check for existing username
+            Optional<User> existingUsernameUser = userRepository.findByUsername(request.getUsername());
             if (existingUsernameUser.isPresent()) {
-                log.warn("Registration failed: Username already exists - {}", request.getUsername());
-                throw new UserAuthenticationException("Username already exists");
+                log.warn("❌ Registration attempt with existing username: {}", request.getUsername());
+                throw new UserAuthenticationException(
+                        "This username is already taken. Please choose a different username."
+                );
             }
 
-            // Create new user
+            // Create and save new user
             User user = UserMapper.toEntity(request);
             user.setPassword(passwordEncoder.encode(request.getPassword()));
+            user.setEmailVerified(false);
 
-            // Generate and store verification code
+            // Generate verification code
             String plainVerificationCode = emailService.generateVerificationCode();
             String hashedVerificationCode = emailService.hashVerificationCode(plainVerificationCode);
 
+            // Store verification code in Redis
             String verificationKey = VERIFICATION_CODE_PREFIX + request.getEmail();
             redisTemplate.opsForValue().set(
                     verificationKey,
@@ -87,84 +106,122 @@ public class AuthService {
                     TimeUnit.MINUTES
             );
 
-            user.setEmailVerified(false);
             user = userRepository.save(user);
 
             // Send verification email
             emailService.sendVerificationCode(user.getEmail(), plainVerificationCode);
 
-            log.info("Registration successful for email: {}", request.getEmail());
+            // Debug logging for verification code
+            log.info("🔐 Registration successful for user: {}", user.getUsername());
+            log.info("📧 Verification code sent to: {}", user.getEmail());
+            log.debug("🔑 Verification Code (DEV ONLY): {}", plainVerificationCode);
+
+            // Log registration details
+            log.info("👤 New user registered: {}", user.getUsername());
+            log.debug("📊 Registration details: Email={}, Username={}, VerificationCode={}",
+                    user.getEmail(), user.getUsername(), plainVerificationCode);
+
             return AuthResponse.builder()
                     .user(UserMapper.toResponse(user))
+                    .message("Registration successful! Please check your email for verification code.")
                     .build();
+
+        } catch (UserAuthenticationException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("Unexpected error during registration for email: {}", request.getEmail(), e);
-            throw new UserAuthenticationException("Registration failed. Please try again later.");
+            log.error("💥 Unexpected error during registration", e);
+            throw new UserAuthenticationException(
+                    "We encountered an unexpected error during registration. Please try again later."
+            );
         }
     }
 
+    /**
+     * Verifies user's email with provided verification code.
+     */
     @Transactional
     public AuthResponse verifyEmail(String email, String providedVerificationCode) {
         try {
-            log.debug("Processing email verification for: {}", email);
+            log.info("🔍 Starting email verification process for: {}", email);
 
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> {
-                        log.warn("Email verification failed: User not found - {}", email);
-                        return new UserAuthenticationException("User not found");
+                        log.warn("❌ Verification attempted for non-existent email: {}", email);
+                        return new UserAuthenticationException(
+                                "We couldn't find an account with this email address."
+                        );
                     });
 
             String verificationKey = VERIFICATION_CODE_PREFIX + email;
             String storedHashedCode = redisTemplate.opsForValue().get(verificationKey);
 
             if (storedHashedCode == null) {
-                log.warn("Email verification failed: Code expired - {}", email);
-                throw new UserAuthenticationException("Verification code has expired");
+                log.warn("⏰ Verification code expired for email: {}", email);
+                throw new UserAuthenticationException(
+                        "The verification code has expired. Please request a new one."
+                );
             }
+
+            log.debug("🔍 Verifying code for email: {}", email);
+            log.debug("📝 Provided code: {}", providedVerificationCode);
 
             if (!passwordEncoder.matches(providedVerificationCode, storedHashedCode)) {
-                log.warn("Email verification failed: Invalid code - {}", email);
-                throw new UserAuthenticationException("Invalid verification code");
+                log.warn("❌ Invalid verification code attempt for email: {}", email);
+                throw new UserAuthenticationException(
+                        "Invalid verification code. Please check and try again."
+                );
             }
 
-            // Mark email as verified and clean up Redis
             user.setEmailVerified(true);
             userRepository.save(user);
+
+            // Cleanup Redis
             redisTemplate.delete(verificationKey);
             redisTemplate.delete(VERIFICATION_ATTEMPTS_PREFIX + email);
 
-            // Generate tokens
             String accessToken = jwtUtil.generateToken(user);
             String refreshToken = jwtUtil.generateRefreshToken(user);
 
-            log.info("Email verification successful for: {}", email);
+            log.info("✅ Email verification successful for: {}", email);
+
             return AuthResponse.builder()
                     .accessToken(accessToken)
                     .refreshToken(refreshToken)
                     .user(UserMapper.toResponse(user))
+                    .message("Email verified successfully! You can now log in.")
                     .build();
+
         } catch (UserAuthenticationException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Unexpected error during email verification for: {}", email, e);
-            throw new UserAuthenticationException("Email verification failed. Please try again later.");
+            log.error("💥 Verification error for email: {}", email, e);
+            throw new UserAuthenticationException(
+                    "An error occurred during email verification. Please try again later."
+            );
         }
     }
 
+    /**
+     * Resends verification code to user's email.
+     */
     @Transactional
     public AuthResponse resendVerificationCode(String email) {
         try {
-            log.debug("Processing verification code resend for: {}", email);
+            log.info("📧 Processing verification code resend request for: {}", email);
 
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> {
-                        log.warn("Verification code resend failed: User not found - {}", email);
-                        return new UserAuthenticationException("User not found");
+                        log.warn("❌ Resend attempted for non-existent email: {}", email);
+                        return new UserAuthenticationException(
+                                "We couldn't find an account with this email address."
+                        );
                     });
 
             if (user.getEmailVerified()) {
-                log.warn("Verification code resend failed: Email already verified - {}", email);
-                throw new UserAuthenticationException("Email is already verified");
+                log.warn("⚠️ Resend attempted for already verified email: {}", email);
+                throw new UserAuthenticationException(
+                        "This email is already verified. You can proceed to login."
+                );
             }
 
             String attemptsKey = VERIFICATION_ATTEMPTS_PREFIX + email;
@@ -175,14 +232,15 @@ public class AuthService {
             }
 
             if (attempts > maxResendAttempts) {
-                log.warn("Verification code resend failed: Maximum attempts reached - {}", email);
+                LocalDateTime nextAttemptTime = LocalDateTime.now().plusHours(resendLimitHours);
+                log.warn("🚫 Maximum resend attempts reached for email: {}", email);
                 throw new VerificationResendLimitException(
-                        "Maximum verification code resend attempts reached. Please try again later.",
-                        LocalDateTime.now().plusHours(resendLimitHours)
+                        String.format("Maximum verification attempts reached. Please try again after %d hours.",
+                                resendLimitHours),
+                        nextAttemptTime
                 );
             }
 
-            // Generate and store new verification code
             String plainVerificationCode = emailService.generateVerificationCode();
             String hashedVerificationCode = emailService.hashVerificationCode(plainVerificationCode);
 
@@ -196,15 +254,23 @@ public class AuthService {
 
             emailService.sendVerificationCode(email, plainVerificationCode);
 
-            log.info("Verification code resent successfully for: {}", email);
+            log.info("📨 New verification code sent to: {}", email);
+            log.debug("🔑 New verification code (DEV ONLY): {}", plainVerificationCode);
+            log.debug("📊 Resend attempt {} of {}", attempts, maxResendAttempts);
+
             return AuthResponse.builder()
                     .user(UserMapper.toResponse(user))
+                    .message(String.format("New verification code sent! Remaining attempts: %d",
+                            maxResendAttempts - attempts))
                     .build();
+
         } catch (UserAuthenticationException | VerificationResendLimitException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Unexpected error during verification code resend for: {}", email, e);
-            throw new UserAuthenticationException("Failed to resend verification code. Please try again later.");
+            log.error("💥 Error resending verification code", e);
+            throw new UserAuthenticationException(
+                    "An error occurred while resending the verification code. Please try again later."
+            );
         }
     }
 
