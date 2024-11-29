@@ -20,7 +20,7 @@ public class EmailProcessor {
     private final RedisTemplate<String, String> redisTemplate;
     private static final String INVITATION_QUEUE_KEY = "invitation:queue";
 
-    @Scheduled(fixedDelay = 1000) // Process every second
+    @Scheduled(fixedDelay = 1000)
     public void processEmailQueue() {
         try {
             // Process verification emails
@@ -35,7 +35,7 @@ public class EmailProcessor {
                 processInvitationEmail(invitationEmail);
             }
         } catch (Exception e) {
-            log.error("💥 Error processing email queue", e);
+            EmailUtil.logEmailError("Error processing email queue", "batch processing", e);
         }
     }
 
@@ -51,7 +51,7 @@ public class EmailProcessor {
             // Process invitation email logic
             // Implementation details...
         } catch (Exception e) {
-            log.error("💥 Error processing invitation email", e);
+            EmailUtil.logEmailError("Error processing invitation email", "invitation processing", e);
         }
     }
 }
