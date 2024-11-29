@@ -1,4 +1,3 @@
-// Employee.java
 package com.example.springrestful.entity;
 
 import jakarta.persistence.*;
@@ -24,8 +23,12 @@ public class Employee {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "admin_id", nullable = false)
-    private User admin;
+    @JoinColumn(name = "organization_id", nullable = false)
+    private Organization organization;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    private Department department;
 
     @Column(name = "first_name")
     private String firstName;
@@ -40,15 +43,17 @@ public class Employee {
     private String phoneNumber;
 
     private LocalDate hireDate;
-    private String department;
     private String position;
     private Double salary;
     private boolean isActive;
 
-    @Column(name = "created_at")
+    @Column(name = "employee_number", unique = true)
+    private String employeeNumber;
+
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     @PrePersist
@@ -60,5 +65,19 @@ public class Employee {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * Business Logic Methods
+     */
+    public String getFullName() {
+        return firstName + " " + lastName;
+    }
+
+    public void assignToDepartment(Department department) {
+        if (department != null && !department.getOrganization().equals(this.organization)) {
+            throw new IllegalArgumentException("Department must belong to the same organization");
+        }
+        this.department = department;
     }
 }

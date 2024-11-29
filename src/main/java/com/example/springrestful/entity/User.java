@@ -20,13 +20,7 @@ import java.util.stream.Collectors;
  * 1. JPA Entity for database persistence
  * 2. Spring Security UserDetails implementation
  * 3. Manages user authentication and authorization details
- *
- * Key Features:
- * - User identification and authentication
- * - Role-based access control
- * - Email verification
- * - Password reset functionality
- * - Two-factor authentication support
+ * 4. Handles organization ownership and management
  */
 @Entity
 @Data
@@ -36,7 +30,6 @@ import java.util.stream.Collectors;
 @Table(name = "users")
 public class User implements UserDetails {
 
-    // Identification and Authentication Fields
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -56,6 +49,13 @@ public class User implements UserDetails {
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "role")
     private Set<UserRole> roles = new HashSet<>();
+
+    // Organization Relationships
+    @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL)
+    private Set<Organization> ownedOrganizations = new HashSet<>();
+
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
+    private Employee employeeProfile;
 
     // Email Verification Fields
     @Column(name = "email_verified")
@@ -88,111 +88,87 @@ public class User implements UserDetails {
     @Column(name = "two_factor_auth_secret")
     private String twoFactorAuthSecret;
 
-    // Relationships
-    @OneToMany(mappedBy = "admin", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private Set<Employee> managedEmployees = new HashSet<>();
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, optional = true)
-    private Employee employeeProfile;
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 
     /**
      * Role Management Methods
-     */
-
-    /**
-     * Adds a role to the user's set of roles.
-     * @param role The role to be added
      */
     public void addRole(UserRole role) {
         this.roles.add(role);
     }
 
-    /**
-     * Removes a role from the user's set of roles.
-     * @param role The role to be removed
-     */
     public void removeRole(UserRole role) {
         this.roles.remove(role);
     }
 
-    /**
-     * Checks if the user has an admin role.
-     * @return true if the user is an admin, false otherwise
-     */
     public boolean isAdmin() {
         return this.roles.contains(UserRole.ADMIN);
     }
 
     /**
-     * Verification Resend Management Methods
+     * Organization Management Methods
      */
+    public void addOwnedOrganization(Organization organization) {
+        this.ownedOrganizations.add(organization);
+        organization.setOwner(this);
+    }
+
+    public void removeOwnedOrganization(Organization organization) {
+        this.ownedOrganizations.remove(organization);
+        organization.setOwner(null);
+    }
 
     /**
-     * Resets the verification resend attempts.
-     * Clears the resend count and last attempt timestamp.
+     * Verification Management Methods
      */
     public void resetVerificationResendAttempts() {
         this.verificationResendCount = 0;
         this.lastVerificationResendAttempt = null;
     }
 
-    /**
-     * Increments the verification resend attempts.
-     * Updates the resend count and last attempt timestamp.
-     */
     public void incrementVerificationResendAttempts() {
         this.verificationResendCount = (this.verificationResendCount == null ? 0 : this.verificationResendCount) + 1;
         this.lastVerificationResendAttempt = LocalDateTime.now();
     }
 
-    /**
-     * Email Verification Code Management Methods
-     */
-
-    /**
-     * Sets the email verification code.
-     * @param verificationCode The verification code to set
-     */
     public void setEmailVerificationCode(String verificationCode) {
         this.emailVerificationToken = verificationCode;
     }
 
-    /**
-     * Sets the email verification code expiry.
-     * @param localDateTime The expiry timestamp
-     */
     public void setEmailVerificationCodeExpiry(LocalDateTime localDateTime) {
         this.emailVerificationTokenExpiry = localDateTime;
     }
 
-    /**
-     * Gets the email verification code.
-     * @return The verification code
-     */
     public String getEmailVerificationCode() {
         return this.emailVerificationToken;
     }
 
-    /**
-     * Gets the email verification code expiry as an Instant.
-     * @return The expiry timestamp or null
-     */
     public Instant getEmailVerificationCodeExpiry() {
         return this.emailVerificationTokenExpiry == null ? null : this.emailVerificationTokenExpiry.toInstant(ZoneOffset.UTC);
     }
 
-    /**
-     * Checks if the email is verified.
-     * @return true if email is verified, false otherwise
-     */
     public boolean getEmailVerified() {
         return this.emailVerified;
     }
 
     /**
-     * Spring Security UserDetails Interface Implementation
+     * Spring Security UserDetails Implementation
      */
-
     @Override
     public Set<GrantedAuthority> getAuthorities() {
         return roles.stream()
