@@ -6,7 +6,6 @@ import com.example.springrestful.exception.ResourceNotFoundException;
 import com.example.springrestful.repository.OrganizationRepository;
 import com.example.springrestful.security.AuthService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +20,7 @@ public class OrganizationService {
 
     @Transactional
     public Organization createOrganization(Long userId, Organization organization) {
-        User owner = userService.getUserById(userId);
+        User owner = userService.getUserEntityById(userId);
         organization.setOwner(owner);
         organization.setCreatedAt(LocalDateTime.now());
         organization.setUpdatedAt(LocalDateTime.now());

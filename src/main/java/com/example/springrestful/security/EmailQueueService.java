@@ -1,5 +1,6 @@
 package com.example.springrestful.security;
 
+import com.example.springrestful.util.EmailUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

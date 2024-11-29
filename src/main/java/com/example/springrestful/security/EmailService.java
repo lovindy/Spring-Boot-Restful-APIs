@@ -3,6 +3,7 @@ package com.example.springrestful.security;
 import com.example.springrestful.entity.EmployeeInvitation;
 import com.example.springrestful.exception.EmailSendingException;
 import com.example.springrestful.exception.InvalidInvitationException;
+import com.example.springrestful.util.EmailUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;

@@ -1,4 +1,4 @@
-package com.example.springrestful.security;
+package com.example.springrestful.util;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.SimpleMailMessage;
