@@ -7,7 +7,7 @@ import com.example.springrestful.entity.User;
 import com.example.springrestful.exception.UserAuthenticationException;
 import com.example.springrestful.exception.VerificationResendLimitException;
 import com.example.springrestful.mapper.UserMapper;
-import com.example.springrestful.repository.UserRepository;
+import com.example.springrestful.repository.AuthRepository;
 import com.example.springrestful.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,7 +42,7 @@ public class AuthService {
     private long verificationCodeExpiryMinutes;
 
     private final UserDetailsService userDetailsService;
-    private final UserRepository userRepository;
+    private final AuthRepository authRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
@@ -64,7 +64,7 @@ public class AuthService {
             log.info("📝 Starting registration process for email: {}", request.getEmail());
 
             // Check for existing email
-            Optional<User> existingEmailUser = userRepository.findByEmail(request.getEmail());
+            Optional<User> existingEmailUser = authRepository.findByEmail(request.getEmail());
             if (existingEmailUser.isPresent()) {
                 User user = existingEmailUser.get();
                 if (!user.getEmailVerified()) {
@@ -80,7 +80,7 @@ public class AuthService {
             }
 
             // Check for existing username
-            Optional<User> existingUsernameUser = userRepository.findByUsername(request.getUsername());
+            Optional<User> existingUsernameUser = authRepository.findByUsername(request.getUsername());
             if (existingUsernameUser.isPresent()) {
                 log.warn("❌ Registration attempt with existing username: {}", request.getUsername());
                 throw new UserAuthenticationException(
@@ -106,7 +106,7 @@ public class AuthService {
                     TimeUnit.MINUTES
             );
 
-            user = userRepository.save(user);
+            user = authRepository.save(user);
 
             // Send verification email
             emailService.sendVerificationCode(user.getEmail(), plainVerificationCode);
@@ -144,7 +144,7 @@ public class AuthService {
         try {
             log.info("🔍 Starting email verification process for: {}", email);
 
-            User user = userRepository.findByEmail(email)
+            User user = authRepository.findByEmail(email)
                     .orElseThrow(() -> {
                         log.warn("❌ Verification attempted for non-existent email: {}", email);
                         return new UserAuthenticationException(
@@ -173,7 +173,7 @@ public class AuthService {
             }
 
             user.setEmailVerified(true);
-            userRepository.save(user);
+            authRepository.save(user);
 
             // Cleanup Redis
             redisTemplate.delete(verificationKey);
@@ -209,7 +209,7 @@ public class AuthService {
         try {
             log.info("📧 Processing verification code resend request for: {}", email);
 
-            User user = userRepository.findByEmail(email)
+            User user = authRepository.findByEmail(email)
                     .orElseThrow(() -> {
                         log.warn("❌ Resend attempted for non-existent email: {}", email);
                         return new UserAuthenticationException(
@@ -282,7 +282,7 @@ public class AuthService {
         try {
             log.info("🔍 Starting login process for email: {}", request.getEmail());
 
-            User user = userRepository.findByEmail(request.getEmail())
+            User user = authRepository.findByEmail(request.getEmail())
                     .orElseThrow(() -> {
                         log.warn("❌ Login failed: No account found for email: {}", request.getEmail());
                         return new UserAuthenticationException(

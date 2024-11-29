@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface AuthRepository extends JpaRepository<User, Long> {
 
     // Automatically generate the query to find a user by their email verification token
     static Optional<User> findByEmailVerificationToken(String token) {
