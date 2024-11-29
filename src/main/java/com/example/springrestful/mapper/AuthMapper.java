@@ -6,7 +6,7 @@ import com.example.springrestful.entity.User;
 import org.springframework.stereotype.Component;
 
 @Component
-public class UserMapper {
+public class AuthMapper {
     public static User toEntity(UserRegistrationRequest request) {
         return User.builder()
                 .email(request.getEmail())

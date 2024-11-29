@@ -6,7 +6,7 @@ import com.example.springrestful.dto.UserRegistrationRequest;
 import com.example.springrestful.entity.User;
 import com.example.springrestful.exception.UserAuthenticationException;
 import com.example.springrestful.exception.VerificationResendLimitException;
-import com.example.springrestful.mapper.UserMapper;
+import com.example.springrestful.mapper.AuthMapper;
 import com.example.springrestful.repository.AuthRepository;
 import com.example.springrestful.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -89,7 +89,7 @@ public class AuthService {
             }
 
             // Create and save new user
-            User user = UserMapper.toEntity(request);
+            User user = AuthMapper.toEntity(request);
             user.setPassword(passwordEncoder.encode(request.getPassword()));
             user.setEmailVerified(false);
 
@@ -122,7 +122,7 @@ public class AuthService {
                     user.getEmail(), user.getUsername(), plainVerificationCode);
 
             return AuthResponse.builder()
-                    .user(UserMapper.toResponse(user))
+                    .user(AuthMapper.toResponse(user))
                     .message("Registration successful! Please check your email for verification code.")
                     .build();
 
@@ -187,7 +187,7 @@ public class AuthService {
             return AuthResponse.builder()
                     .accessToken(accessToken)
                     .refreshToken(refreshToken)
-                    .user(UserMapper.toResponse(user))
+                    .user(AuthMapper.toResponse(user))
                     .message("Email verified successfully! You can now log in.")
                     .build();
 
@@ -259,7 +259,7 @@ public class AuthService {
             log.debug("📊 Resend attempt {} of {}", attempts, maxResendAttempts);
 
             return AuthResponse.builder()
-                    .user(UserMapper.toResponse(user))
+                    .user(AuthMapper.toResponse(user))
                     .message(String.format("New verification code sent! Remaining attempts: %d",
                             maxResendAttempts - attempts))
                     .build();
@@ -318,7 +318,7 @@ public class AuthService {
             return AuthResponse.builder()
                     .accessToken(accessToken)
                     .refreshToken(refreshToken)
-                    .user(UserMapper.toResponse(user))
+                    .user(AuthMapper.toResponse(user))
                     .message("Login successful!")
                     .build();
 
@@ -407,7 +407,7 @@ public class AuthService {
             return AuthResponse.builder()
                     .accessToken(newAccessToken)
                     .refreshToken(newRefreshToken)
-                    .user(UserMapper.toResponse(user))
+                    .user(AuthMapper.toResponse(user))
                     .message("Token refreshed successfully.")
                     .build();
 
