@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Organization Invitation</title>
+</head>
+<body>
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <h2>You've Been Invited!</h2>
+    <p>You have been invited to join <strong th:text="${organizationName}"></strong>.</p>
+    <p>Please click the button below to accept the invitation:</p>
+    <div style="text-align: center; margin: 30px 0;">
+        <a th:href="${invitationLink}"
+           style="background-color: #4CAF50; color: white; padding: 14px 20px;
+                      text-decoration: none; border-radius: 4px;">
+            Accept Invitation
+        </a>
+    </div>
+    <p>This invitation will expire on <span th:text="${expiryDate}"></span>.</p>
+    <p>If you did not expect this invitation, please ignore this email.</p>
+</div>
+</body>
+</html>
