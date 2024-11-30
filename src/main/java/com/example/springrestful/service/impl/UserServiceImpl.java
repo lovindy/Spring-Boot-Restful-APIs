@@ -28,11 +28,11 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Cacheable(value = "users") // Use Spring's Cacheable annotation
+    @Cacheable(value = "users")
     public List<UserDto> getAllUsers() {
         List<User> users = userRepository.findAll();
         return users.stream()
-                .map(userMapper::toDto) // Convert each User entity to UserDto
+                .map(userMapper::toDto)
                 .collect(Collectors.toList());
     }
 
