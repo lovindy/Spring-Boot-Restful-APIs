@@ -1,14 +1,13 @@
 package com.example.springrestful.security;
 
+import com.example.springrestful.util.EmailUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -21,15 +20,12 @@ public class EmailQueueService {
 
     public void queueEmail(String toEmail, String verificationCode) {
         try {
-            Map<String, String> emailData = Map.of(
-                    "toEmail", toEmail,
-                    "verificationCode", verificationCode
-            );
+            Map<String, String> emailData = EmailUtil.createEmailQueueData(toEmail, verificationCode);
             String emailJson = objectMapper.writeValueAsString(emailData);
             redisTemplate.opsForList().rightPush(EMAIL_QUEUE_KEY, emailJson);
-            log.debug("Email queued successfully for: {}", toEmail);
+            EmailUtil.logEmailSuccess("Email queued successfully", toEmail);
         } catch (Exception e) {
-            log.error("Failed to queue email", e);
+            EmailUtil.logEmailError("Failed to queue email", toEmail, e);
             throw new RuntimeException("Failed to queue email", e);
         }
     }

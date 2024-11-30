@@ -3,7 +3,7 @@ package com.example.springrestful.controller;
 import com.example.springrestful.dto.InvitationRequest;
 import com.example.springrestful.dto.InvitationResponse;
 import com.example.springrestful.entity.EmployeeInvitation;
-import com.example.springrestful.security.EmployeeInvitationService;
+import com.example.springrestful.service.EmployeeInvitationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;

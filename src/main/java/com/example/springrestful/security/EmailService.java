@@ -3,11 +3,13 @@ package com.example.springrestful.security;
 import com.example.springrestful.entity.EmployeeInvitation;
 import com.example.springrestful.exception.EmailSendingException;
 import com.example.springrestful.exception.InvalidInvitationException;
+import com.example.springrestful.util.EmailUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -15,12 +17,10 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Value;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -49,93 +49,73 @@ public class EmailService {
     private String invitationBaseUrl;
 
     public String generateVerificationCode() {
-        SecureRandom random = new SecureRandom();
-        int code = 100000 + random.nextInt(900000);
-        return String.valueOf(code);
+        return EmailUtil.generateVerificationCode();
     }
 
     public String hashVerificationCode(String plainCode) {
-        return passwordEncoder.encode(plainCode);
+        return EmailUtil.hashVerificationCode(plainCode, passwordEncoder);
     }
 
-    // This method now queues the email instead of sending it directly
     public void sendVerificationCode(String toEmail, String verificationCode) {
         try {
             if (toEmail == null || toEmail.trim().isEmpty()) {
                 throw new IllegalArgumentException("Recipient email cannot be null or empty");
             }
 
-            // Queue the email instead of sending it directly
             emailQueueService.queueEmail(toEmail, verificationCode);
-            log.info("Verification email queued for: {}", toEmail);
+            EmailUtil.logEmailSuccess("Verification email queued", toEmail);
 
         } catch (Exception e) {
-            log.error("Failed to queue verification email", e);
+            EmailUtil.logEmailError("Failed to queue verification email", toEmail, e);
             throw new RuntimeException("Failed to queue verification email: " + e.getMessage(), e);
         }
     }
 
-    // Actual email sending logic moved to a separate method
     @Async
     protected void processAndSendEmail(String toEmail, String verificationCode) {
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(toEmail);
-            message.setSubject("Email Verification Code");
-
-            String emailContent = String.format("""
-                    Hello,
-                    
-                    Your verification code is: %s
-                    
-                    This code will expire in 10 minutes.
-                    
-                    If you didn't request this, please ignore this email.
-                    SeangDev Application Team
-                    """, verificationCode);
-
-            message.setText(emailContent);
+            SimpleMailMessage message = EmailUtil.createVerificationEmail(fromEmail, toEmail, verificationCode);
             mailSender.send(message);
-            log.info("Email sent successfully to: {}", toEmail);
+            EmailUtil.logEmailSuccess("Email sent successfully", toEmail);
 
         } catch (Exception e) {
-            log.error("Failed to send email", e);
-            // Consider implementing a retry mechanism here
+            EmailUtil.logEmailError("Failed to send email", toEmail, e);
+            handleEmailFailure(toEmail, verificationCode);
         }
     }
 
     public void sendInvitationEmail(EmployeeInvitation invitation) {
         try {
-            // Cache invitation data in Redis
             cacheInvitationData(invitation);
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, StandardCharsets.UTF_8.name());
 
-            Context context = new Context();
-            Map<String, Object> variables = new HashMap<>();
-            variables.put("organizationName", invitation.getOrganization().getName());
-            variables.put("invitationLink",
-                    generateInvitationLink(invitation.getInvitationToken()));
-            variables.put("expiryDate", invitation.getTokenExpiry().toLocalDate().toString());
-            context.setVariables(variables);
-
-            String emailContent = templateEngine.process("invitation-email", context);
+            String emailContent = generateInvitationEmailContent(invitation);
 
             helper.setTo(invitation.getEmail());
             helper.setSubject("Invitation to join " + invitation.getOrganization().getName());
             helper.setText(emailContent, true);
             helper.setFrom(fromEmail);
 
-            // Queue invitation email
             queueInvitationEmail(invitation.getEmail(), emailContent);
-            log.info("📨 Invitation email queued for: {}", invitation.getEmail());
+            EmailUtil.logEmailSuccess("Invitation email queued", invitation.getEmail());
 
         } catch (MessagingException e) {
-            log.error("💥 Failed to prepare invitation email", e);
+            EmailUtil.logEmailError("Failed to prepare invitation email", invitation.getEmail(), e);
             throw new EmailSendingException("Failed to send invitation email", e);
         }
+    }
+
+    private String generateInvitationEmailContent(EmployeeInvitation invitation) {
+        Context context = new Context();
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("organizationName", invitation.getOrganization().getName());
+        variables.put("invitationLink", generateInvitationLink(invitation.getInvitationToken()));
+        variables.put("expiryDate", invitation.getTokenExpiry().toLocalDate().toString());
+        context.setVariables(variables);
+
+        return templateEngine.process("invitation-email", context);
     }
 
     private void cacheInvitationData(EmployeeInvitation invitation) {
@@ -152,7 +132,7 @@ public class EmailService {
 
             log.debug("🗄️ Invitation data cached with key: {}", cacheKey);
         } catch (Exception e) {
-            log.error("💥 Failed to cache invitation data", e);
+            EmailUtil.logEmailError("Failed to cache invitation data", invitation.getEmail(), e);
             throw new InvalidInvitationException("Failed to process invitation" + e);
         }
     }
@@ -165,15 +145,11 @@ public class EmailService {
 
     private void queueInvitationEmail(String email, String content) {
         try {
-            Map<String, String> emailData = Map.of(
-                    "type", "invitation",
-                    "email", email,
-                    "content", content
-            );
+            Map<String, String> emailData = EmailUtil.createInvitationQueueData(email, content);
             redisTemplate.opsForList().rightPush(INVITATION_QUEUE_KEY,
                     objectMapper.writeValueAsString(emailData));
         } catch (Exception e) {
-            log.error("💥 Failed to queue invitation email", e);
+            EmailUtil.logEmailError("Failed to queue invitation email", email, e);
             throw new EmailSendingException("Failed to queue invitation email", e);
         }
     }
@@ -183,7 +159,6 @@ public class EmailService {
     }
 
     private void handleEmailFailure(String toEmail, String verificationCode) {
-        // Implement retry logic or dead letter queue
         log.warn("⚠️ Implementing retry logic for failed email to: {}", toEmail);
         // Add to dead letter queue or retry queue
     }
