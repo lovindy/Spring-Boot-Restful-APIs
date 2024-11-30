@@ -10,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+import java.nio.file.AccessDeniedException;
 
 @RestController
 @RequestMapping("/api/v1/organizations")
@@ -18,10 +19,9 @@ public class OrganizationController {
     private final OrganizationService organizationService;
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ROLE_ADMIN')") // Updated to match the actual role name
     public ResponseEntity<OrganizationResponse> createOrganization(
-            @RequestAttribute Long userId,
-            @Valid @RequestBody OrganizationRequest request) {
+            @Valid @RequestBody OrganizationRequest request) throws AccessDeniedException {
 
         Organization organization = Organization.builder()
                 .name(request.getName())
@@ -29,12 +29,12 @@ public class OrganizationController {
                 .registrationNumber(request.getRegistrationNumber())
                 .build();
 
-        Organization savedOrganization = organizationService.createOrganization(userId, organization);
+        Organization savedOrganization = organizationService.createOrganization(organization);
         return ResponseEntity.ok(OrganizationResponse.fromEntity(savedOrganization));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_EMPLOYEE')") // Updated to match the actual role names
     public ResponseEntity<OrganizationResponse> getOrganization(@PathVariable Long id) {
         Organization organization = organizationService.getOrganizationById(id);
         return ResponseEntity.ok(OrganizationResponse.fromEntity(organization));

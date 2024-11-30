@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.AccessDeniedException;
 import java.time.LocalDateTime;
 
 @Service
@@ -19,7 +20,8 @@ public class OrganizationService {
     private final AuthService authService;
 
     @Transactional
-    public Organization createOrganization(Long userId, Organization organization) {
+    public Organization createOrganization(Organization organization) throws AccessDeniedException {
+        Long userId = authService.getCurrentUserId();  // Get current user ID automatically
         User owner = userService.getUserEntityById(userId);
         organization.setOwner(owner);
         organization.setCreatedAt(LocalDateTime.now());

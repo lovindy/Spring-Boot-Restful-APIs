@@ -3,11 +3,15 @@ package com.example.springrestful.security;
 import com.example.springrestful.dto.AuthResponse;
 import com.example.springrestful.dto.LoginRequest;
 import com.example.springrestful.dto.UserRegistrationRequest;
+import com.example.springrestful.entity.Organization;
 import com.example.springrestful.entity.User;
+import com.example.springrestful.enums.UserRole;
 import com.example.springrestful.exception.UserAuthenticationException;
 import com.example.springrestful.exception.VerificationResendLimitException;
 import com.example.springrestful.mapper.AuthMapper;
 import com.example.springrestful.repository.AuthRepository;
+import com.example.springrestful.repository.OrganizationRepository;
+import com.example.springrestful.service.impl.CustomUserDetailsImpl;
 import com.example.springrestful.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,14 +21,17 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.AccessDeniedException;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @RequiredArgsConstructor
@@ -43,6 +50,7 @@ public class AuthService {
 
     private final UserDetailsService userDetailsService;
     private final AuthRepository authRepository;
+    private final OrganizationRepository organizationRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
@@ -51,6 +59,17 @@ public class AuthService {
 
     private static final String VERIFICATION_CODE_PREFIX = "verification:";
     private static final String VERIFICATION_ATTEMPTS_PREFIX = "verification_attempts:";
+
+
+    public Long getCurrentUserId() throws AccessDeniedException {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("User not authenticated");
+        }
+
+        CustomUserDetailsImpl userDetails = (CustomUserDetailsImpl) authentication.getPrincipal();
+        return userDetails.getId();
+    }
 
     /**
      * Handles user registration process with email verification.
@@ -88,12 +107,15 @@ public class AuthService {
                 );
             }
 
-            // Create and save new user
+            // Step 1: Create and save new user
             User user = AuthMapper.toEntity(request);
             user.setPassword(passwordEncoder.encode(request.getPassword()));
             user.setEmailVerified(false);
 
-            // Generate verification code
+            // Assign the user an ADMIN role by default
+            user.setRoles(Set.of(UserRole.ADMIN));
+
+            // Step 2: Generate and store email verification code
             String plainVerificationCode = emailService.generateVerificationCode();
             String hashedVerificationCode = emailService.hashVerificationCode(plainVerificationCode);
 

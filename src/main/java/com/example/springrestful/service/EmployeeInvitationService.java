@@ -1,10 +1,10 @@
-package com.example.springrestful.security;
+package com.example.springrestful.service;
 
 import com.example.springrestful.entity.EmployeeInvitation;
 import com.example.springrestful.entity.Organization;
 import com.example.springrestful.exception.InvalidInvitationException;
 import com.example.springrestful.repository.EmployeeInvitationRepository;
-import com.example.springrestful.service.OrganizationService;
+import com.example.springrestful.security.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
