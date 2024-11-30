@@ -48,6 +48,9 @@ public class AuthService {
     @Value("${verification.code.expiry.minutes}")
     private long verificationCodeExpiryMinutes;
 
+    @Value("${jwt.password-reset-token-expiry-minutes}")
+    private int passwordResetTokenExpiryMinutes;
+
     private final UserDetailsService userDetailsService;
     private final AuthRepository authRepository;
     private final OrganizationRepository organizationRepository;
@@ -439,6 +442,158 @@ public class AuthService {
             log.error("💥 Unexpected error during token refresh.", e);
             throw new UserAuthenticationException(
                     "An error occurred during token refresh. Please try again later."
+            );
+        }
+    }
+
+    private static final String PASSWORD_RESET_TOKEN_PREFIX = "password_reset:";
+
+    /**
+     * Initiates the forgot password process by sending a reset token to user's email
+     */
+    @Transactional
+    public AuthResponse forgotPassword(String email) {
+        try {
+            log.info("🔄 Starting password reset process for email: {}", email);
+
+            User user = authRepository.findByEmail(email)
+                    .orElseThrow(() -> {
+                        log.warn("❌ Password reset attempted for non-existent email: {}", email);
+                        return new UserAuthenticationException(
+                                "If an account exists with this email, you will receive password reset instructions."
+                        );
+                    });
+
+            if (!user.getEmailVerified()) {
+                log.warn("⚠️ Password reset attempted for unverified email: {}", email);
+                throw new UserAuthenticationException(
+                        "Please verify your email address before resetting your password."
+                );
+            }
+
+            // Generate and store reset token
+            String plainResetToken = emailService.generateVerificationCode();
+            String hashedResetToken = emailService.hashVerificationCode(plainResetToken);
+
+            // Store reset token in Redis
+            String resetTokenKey = PASSWORD_RESET_TOKEN_PREFIX + email;
+            redisTemplate.opsForValue().set(
+                    resetTokenKey,
+                    hashedResetToken,
+                    passwordResetTokenExpiryMinutes,
+                    TimeUnit.MINUTES
+            );
+
+            // Send reset email
+            emailService.sendPasswordResetToken(email, plainResetToken);
+
+            log.info("📧 Password reset token sent to: {}", email);
+            log.debug("🔑 Reset Token (DEV ONLY): {}", plainResetToken);
+
+            return AuthResponse.builder()
+                    .message("If an account exists with this email, you will receive password reset instructions.")
+                    .build();
+
+        } catch (UserAuthenticationException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("💥 Error in forgot password process", e);
+            throw new UserAuthenticationException(
+                    "An error occurred while processing your request. Please try again later."
+            );
+        }
+    }
+
+    /**
+     * Resets user's password using the provided reset token
+     */
+    @Transactional
+    public AuthResponse resetPassword(String email, String resetToken, String newPassword) {
+        try {
+            log.info("🔄 Processing password reset for email: {}", email);
+
+            User user = authRepository.findByEmail(email)
+                    .orElseThrow(() -> {
+                        log.warn("❌ Password reset attempted for non-existent email: {}", email);
+                        return new UserAuthenticationException("Invalid or expired reset token.");
+                    });
+
+            String resetTokenKey = PASSWORD_RESET_TOKEN_PREFIX + email;
+            String storedHashedToken = redisTemplate.opsForValue().get(resetTokenKey);
+
+            if (storedHashedToken == null) {
+                log.warn("⏰ Reset token expired for email: {}", email);
+                throw new UserAuthenticationException("Reset token has expired. Please request a new one.");
+            }
+
+            if (!passwordEncoder.matches(resetToken, storedHashedToken)) {
+                log.warn("❌ Invalid reset token used for email: {}", email);
+                throw new UserAuthenticationException("Invalid reset token.");
+            }
+
+            // Update password
+            user.setPassword(passwordEncoder.encode(newPassword));
+            authRepository.save(user);
+
+            // Cleanup Redis and invalidate all sessions
+            redisTemplate.delete(resetTokenKey);
+            jwtUtil.invalidateAllUserSessions(user.getUsername());
+
+            log.info("✅ Password reset successful for email: {}", email);
+
+            return AuthResponse.builder()
+                    .message("Password has been reset successfully. You can now login with your new password.")
+                    .build();
+
+        } catch (UserAuthenticationException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("💥 Error in reset password process", e);
+            throw new UserAuthenticationException(
+                    "An error occurred while resetting your password. Please try again later."
+            );
+        }
+    }
+
+    /**
+     * Changes user's password (requires current password)
+     */
+    @Transactional
+    public AuthResponse changePassword(String email, String currentPassword, String newPassword) {
+        try {
+            log.info("🔄 Processing password change for email: {}", email);
+
+            User user = authRepository.findByEmail(email)
+                    .orElseThrow(() -> {
+                        log.warn("❌ Password change attempted for non-existent email: {}", email);
+                        return new UserAuthenticationException("User not found.");
+                    });
+
+            // Verify current password
+            if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+                log.warn("❌ Invalid current password provided for email: {}", email);
+                throw new UserAuthenticationException("Current password is incorrect.");
+            }
+
+            // Update password
+            user.setPassword(passwordEncoder.encode(newPassword));
+            authRepository.save(user);
+
+            // Invalidate all sessions
+            jwtUtil.invalidateAllUserSessions(user.getUsername());
+
+            log.info("✅ Password change successful for email: {}", email);
+
+            return AuthResponse.builder()
+                    .message("Password changed successfully. Please login with your new password.")
+                    .build();
+
+        } catch (UserAuthenticationException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("💥 Error in password change process", e);
+            throw new UserAuthenticationException(
+                    "An error occurred while changing your password. Please try again later."
             );
         }
     }
