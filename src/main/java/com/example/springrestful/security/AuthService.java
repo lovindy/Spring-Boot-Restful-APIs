@@ -62,8 +62,11 @@ public class AuthService {
 
     private static final String VERIFICATION_CODE_PREFIX = "verification:";
     private static final String VERIFICATION_ATTEMPTS_PREFIX = "verification_attempts:";
+    private static final String PASSWORD_RESET_TOKEN_PREFIX = "password_reset:";
 
-
+    /**
+     * Get the current login user id
+     */
     public Long getCurrentUserId() throws AccessDeniedException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
@@ -445,8 +448,6 @@ public class AuthService {
             );
         }
     }
-
-    private static final String PASSWORD_RESET_TOKEN_PREFIX = "password_reset:";
 
     /**
      * Initiates the forgot password process by sending a reset token to user's email

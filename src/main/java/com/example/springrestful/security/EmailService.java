@@ -191,7 +191,7 @@ public class EmailService {
                     passwordResetTokenExpiryMinutes
             ));
 
-            emailQueueService.queueEmail(toEmail, String.valueOf(message));
+            emailQueueService.queueEmail(toEmail, resetToken);
             EmailUtil.logEmailSuccess("Password reset email queued", toEmail);
 
         } catch (Exception e) {
