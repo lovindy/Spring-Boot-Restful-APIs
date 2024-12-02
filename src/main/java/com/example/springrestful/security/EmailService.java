@@ -87,6 +87,9 @@ public class EmailService {
         }
     }
 
+    /**
+     * Sends invitation process
+     */
     public void sendInvitationEmail(EmployeeInvitation invitation) {
         try {
             cacheInvitationData(invitation);
