@@ -42,7 +42,7 @@ const loading = ref(false)
 const rememberMe = ref(false)
 
 const form = reactive({
-  email: '',
+  email: 'seangdy085@gmai.com',
   password: ''
 })
 
