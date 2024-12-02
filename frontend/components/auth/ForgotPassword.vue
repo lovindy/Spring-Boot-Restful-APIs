@@ -1,7 +1,7 @@
 <!-- components/auth/ForgotPassword.vue -->
 <template>
   <UCard class="w-full max-w-md mx-auto p-6">
-    <UForm :schema="forgotPasswordSchema" @submit="onSubmit">
+    <UForm :state="form" :schema="forgotPasswordSchema" @submit="onSubmit">
       <h2 class="text-2xl font-semibold mb-6">Forgot Password</h2>
 
       <p class="text-gray-600 mb-6">
@@ -9,7 +9,7 @@
       </p>
 
       <UFormGroup label="Email" name="email">
-        <UInput v-model="form.email" type="email" placeholder="Enter your email" />
+        <UInput v-model="form.email" type="email" placeholder="Enter your email"/>
       </UFormGroup>
 
       <UButton type="submit" block :loading="loading" class="mt-6">
@@ -27,18 +27,14 @@
 </template>
 
 <script setup lang="ts">
-import { z } from 'zod'
-import { useAuthStore } from '~/composables/useAuth'
+import {useAuthStore} from '~/composables/useAuth'
+import {forgotPasswordSchema} from "~/validators/auth";
 
 const auth = useAuthStore()
 const loading = ref(false)
 
 const form = reactive({
   email: ''
-})
-
-const forgotPasswordSchema = z.object({
-  email: z.string().email('Invalid email address')
 })
 
 const onSubmit = async () => {

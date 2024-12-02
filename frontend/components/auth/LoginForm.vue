@@ -5,15 +5,15 @@
       <h2 class="text-2xl font-semibold mb-6">Login</h2>
 
       <UFormGroup label="Email" name="email">
-        <UInput v-model="form.email" type="email" placeholder="Enter your email" />
+        <UInput v-model="form.email" type="email" placeholder="Enter your email"/>
       </UFormGroup>
 
       <UFormGroup label="Password" name="password">
-        <UInput v-model="form.password" type="password" placeholder="Enter your password" />
+        <UInput v-model="form.password" type="password" placeholder="Enter your password"/>
       </UFormGroup>
 
       <div class="flex justify-between items-center mt-4 mb-6">
-        <UCheckbox v-model="rememberMe" label="Remember me" />
+        <UCheckbox v-model="rememberMe" label="Remember me"/>
         <NuxtLink to="/auth/forgot-password" class="text-primary hover:underline">
           Forgot Password?
         </NuxtLink>
@@ -34,8 +34,8 @@
 </template>
 
 <script setup lang="ts">
-import { z } from 'zod'
-import { useAuthStore } from '~/composables/useAuth'
+import {useAuthStore} from '~/composables/useAuth'
+import {loginSchema} from "~/validators/auth";
 
 const auth = useAuthStore()
 const loading = ref(false)
@@ -44,11 +44,6 @@ const rememberMe = ref(false)
 const form = reactive({
   email: '',
   password: ''
-})
-
-const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters')
 })
 
 const onSubmit = async () => {

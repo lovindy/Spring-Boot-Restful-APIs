@@ -1,7 +1,7 @@
 <!-- components/auth/VerifyEmail.vue -->
 <template>
   <UCard class="w-full max-w-md mx-auto p-6">
-    <UForm :schema="verifySchema" @submit="onSubmit">
+    <UForm :schema="verifySchema" :state="form" @submit="onSubmit">
       <h2 class="text-2xl font-semibold mb-6">Verify Email</h2>
 
       <p class="text-gray-600 mb-6">
@@ -37,8 +37,8 @@
 </template>
 
 <script setup lang="ts">
-import { z } from 'zod'
-import { useAuthStore } from '~/composables/useAuth'
+import {useAuthStore} from '~/composables/useAuth'
+import {verifySchema} from "~/validators/auth";
 
 const auth = useAuthStore()
 const loading = ref(false)
@@ -46,10 +46,6 @@ const resendLoading = ref(false)
 
 const form = reactive({
   code: ''
-})
-
-const verifySchema = z.object({
-  code: z.string().length(6, 'Verification code must be 6 characters')
 })
 
 const onSubmit = async () => {
