@@ -1,38 +1,60 @@
+<!-- Registration.vue -->
 <template>
   <div class="login-container">
     <form @submit.prevent="handleSubmit" class="login-form">
-      <h2>Login</h2>
+      <h2>Create Account</h2>
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input
+          type="text"
+          id="username"
+          v-model="form.username"
+          required
+          class="form-input"
+        />
+      </div>
       <div class="form-group">
         <label for="email">Email</label>
-        <input type="email" id="email" v-model="form.email" required class="form-input"/>
+        <input
+          type="email"
+          id="email"
+          v-model="form.email"
+          required
+          class="form-input"
+        />
       </div>
       <div class="form-group">
         <label for="password">Password</label>
-        <input type="password" id="password" v-model="form.password" required class="form-input"/>
+        <input
+          type="password"
+          id="password"
+          v-model="form.password"
+          required
+          class="form-input"
+        />
       </div>
       <button type="submit" :disabled="loading" class="submit-button">
-        {{ loading ? 'Loading...' : 'Login' }}
+        {{ loading ? 'Creating Account...' : 'Register' }}
       </button>
       <p v-if="error" class="error-message">{{ error }}</p>
       <p class="auth-link">
-        Don't have an account?
-        <router-link to="/register">Register here</router-link>
-        <router-link to="/forgot-password">Forgot Password?</router-link>
+        Already have an account?
+        <router-link to="/login">Login here</router-link>
       </p>
     </form>
   </div>
 </template>
 
 <script setup lang="ts">
-import {ref, reactive} from 'vue';
-import {useRouter} from 'vue-router';
-import {useAuthStore} from '@/stores/auth';
-import type {LoginRequest} from '@/types/api';
+import { ref, reactive } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
 
 const router = useRouter();
 const authStore = useAuthStore();
 
-const form = reactive<LoginRequest>({
+const form = reactive({
+  username: '',
   email: '',
   password: '',
 });
@@ -43,10 +65,13 @@ const error = ref('');
 const handleSubmit = async () => {
   try {
     loading.value = true;
-    await authStore.login(form);
-    router.push('/dashboard');
+    const response = await authStore.register(form);
+    router.push({
+      path: '/verify-email',
+      query: { email: form.email }
+    });
   } catch (err: any) {
-    error.value = err.response?.data?.message || 'Login failed';
+    error.value = err.response?.data?.message || 'Registration failed';
   } finally {
     loading.value = false;
   }
