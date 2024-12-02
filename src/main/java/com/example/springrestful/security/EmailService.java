@@ -48,6 +48,9 @@ public class EmailService {
     @Value("${application.invitation.base-url}")
     private String invitationBaseUrl;
 
+    @Value("${jwt.password-reset-token-expiry-minutes}")
+    private int passwordResetTokenExpiryMinutes;
+
     public String generateVerificationCode() {
         return EmailUtil.generateVerificationCode();
     }
@@ -84,6 +87,9 @@ public class EmailService {
         }
     }
 
+    /**
+     * Sends invitation process
+     */
     public void sendInvitationEmail(EmployeeInvitation invitation) {
         try {
             cacheInvitationData(invitation);
@@ -161,5 +167,39 @@ public class EmailService {
     private void handleEmailFailure(String toEmail, String verificationCode) {
         log.warn("⚠️ Implementing retry logic for failed email to: {}", toEmail);
         // Add to dead letter queue or retry queue
+    }
+
+    /**
+     * Sends password reset token to user's email
+     */
+    public void sendPasswordResetToken(String toEmail, String resetToken) {
+        try {
+            if (toEmail == null || toEmail.trim().isEmpty()) {
+                throw new IllegalArgumentException("Recipient email cannot be null or empty");
+            }
+
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromEmail);
+            message.setTo(toEmail);
+            message.setSubject("Password Reset Request");
+            message.setText(String.format(
+                    "Hello,\n\n" +
+                            "We received a request to reset your password. " +
+                            "Your password reset code is: %s\n\n" +
+                            "This code will expire in %d minutes.\n\n" +
+                            "If you didn't request this, please ignore this email.\n\n" +
+                            "Best regards,\n" +
+                            "Your Application Team",
+                    resetToken,
+                    passwordResetTokenExpiryMinutes
+            ));
+
+            emailQueueService.queueEmail(toEmail, resetToken);
+            EmailUtil.logEmailSuccess("Password reset email queued", toEmail);
+
+        } catch (Exception e) {
+            EmailUtil.logEmailError("Failed to queue password reset email", toEmail, e);
+            throw new EmailSendingException("Failed to send password reset email", e);
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.example.springrestful.service;
 
 import com.example.springrestful.entity.Organization;
 import com.example.springrestful.entity.User;
+import com.example.springrestful.exception.DuplicateRegistrationNumberException;
 import com.example.springrestful.exception.ResourceNotFoundException;
 import com.example.springrestful.repository.OrganizationRepository;
 import com.example.springrestful.security.AuthService;
@@ -21,8 +22,14 @@ public class OrganizationService {
 
     @Transactional
     public Organization createOrganization(Organization organization) throws AccessDeniedException {
-        Long userId = authService.getCurrentUserId();  // Get current user ID automatically
+        Long userId = authService.getCurrentUserId();
         User owner = userService.getUserEntityById(userId);
+
+        // Check for duplicate registration number before saving
+        if (organizationRepository.existsByRegistrationNumber(organization.getRegistrationNumber())) {
+            throw new DuplicateRegistrationNumberException(organization.getRegistrationNumber());
+        }
+
         organization.setOwner(owner);
         organization.setCreatedAt(LocalDateTime.now());
         organization.setUpdatedAt(LocalDateTime.now());

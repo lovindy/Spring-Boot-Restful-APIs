@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useAuthStore } from '@/stores/auth'
 
 const api = axios.create({
   baseURL: 'http://localhost:8080/api/v1',
@@ -10,7 +11,7 @@ const api = axios.create({
 // Add a request interceptor
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('accessToken')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -25,11 +26,31 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized access
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+    const originalRequest = error.config
+
+    // If the error is 401 and we haven't tried to refresh the token yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true
+
+      try {
+        const authStore = useAuthStore()
+        await authStore.refreshTokens()
+
+        // Retry the original request with the new token
+        const token = localStorage.getItem('accessToken')
+        if (token) {
+          originalRequest.headers.Authorization = `Bearer ${token}`
+        }
+        return api(originalRequest)
+      } catch (refreshError) {
+        // If refresh fails, redirect to login
+        const authStore = useAuthStore()
+        authStore.clearTokens()
+        window.location.href = '/login'
+        return Promise.reject(refreshError)
+      }
     }
+
     return Promise.reject(error)
   },
 )
