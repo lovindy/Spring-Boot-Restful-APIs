@@ -9,5 +9,9 @@ export default defineNuxtConfig({
         public: {
             apiBase: 'http://localhost:8080/api/v1'
         }
+    },
+    devtools: {enabled: true},
+    experimental: {
+        typedPages: true,
     }
 })

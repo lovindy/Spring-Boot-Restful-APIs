@@ -1,3 +1,4 @@
+<!-- pages/login.vue -->
 <template>
   <LoginForm/>
 </template>

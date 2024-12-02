@@ -5,15 +5,15 @@
       <h2 class="text-2xl font-semibold mb-6">Create Account</h2>
 
       <UFormGroup label="Email" name="email">
-        <UInput v-model="form.email" type="email" placeholder="Enter your email" />
+        <UInput v-model="form.email" type="email" placeholder="Enter your email"/>
       </UFormGroup>
 
       <UFormGroup label="Username" name="username">
-        <UInput v-model="form.username" type="text" placeholder="Enter your username" />
+        <UInput v-model="form.username" type="text" placeholder="Enter your username"/>
       </UFormGroup>
 
       <UFormGroup label="Password" name="password">
-        <UInput v-model="form.password" type="password" placeholder="Create password" />
+        <UInput v-model="form.password" type="password" placeholder="Create password"/>
       </UFormGroup>
 
       <UFormGroup label="Confirm Password" name="confirmPassword">
@@ -39,8 +39,8 @@
 </template>
 
 <script setup lang="ts">
-import { useAuthStore } from '~/composables/useAuth'
-import { registerSchema } from "~/validators/auth";
+import {useAuthStore} from '~/composables/useAuth'
+import {registerSchema} from "~/validators/auth";
 
 const auth = useAuthStore()
 const loading = ref(false)
