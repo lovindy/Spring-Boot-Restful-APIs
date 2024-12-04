@@ -68,7 +68,7 @@ const onSubmit = async () => {
       color: 'green'
     })
 
-    navigateTo('/')
+    navigateTo('/auth/login')
   } catch (error: any) {
     useToast().add({
       title: 'Verification Failed',
