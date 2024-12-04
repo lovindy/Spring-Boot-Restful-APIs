@@ -1,11 +1,14 @@
-<script setup lang="ts">
-
-</script>
-
+<!-- pages/employee/dashboard.vue -->
 <template>
-  <div class="text-black">This is employee dashboard</div>
+  <div>
+    <!-- employee dashboard content -->
+    <h1 class="text-black">Employee Dashboard</h1>
+    <!-- ... -->
+  </div>
 </template>
 
-<style scoped>
-
-</style>
+<script setup>
+definePageMeta({
+  layout: 'dashboard'
+})
+</script>

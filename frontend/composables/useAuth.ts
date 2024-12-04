@@ -7,11 +7,45 @@ export const useAuthStore = defineStore('auth', () => {
     const token = ref<string | null>(null)
     const refreshToken = ref<string | null>(null)
     const user = ref<any | null>(null)
-    const pendingEmail = ref<string | null>(null) // New ref to store email during registration
-    const isAuthenticated = computed(() => !!token.value)
+    const pendingEmail = ref<string | null>(null)
+
+    // Check the user authentication
+    const isAuthenticated = computed(() => {
+        const isValid = !!(
+            token.value &&
+            user.value &&
+            user.value.roles &&
+            user.value.roles.length > 0
+        )
+
+        console.log('Authentication state:', {
+            tokenExists: !!token.value,
+            userExists: !!user.value,
+            userRoles: user.value?.roles,
+            isAuthenticated: isValid
+        })
+
+        return isValid
+    })
 
     const config = useRuntimeConfig()
     const baseURL = config.public.apiBase || 'http://localhost:8080/api/v1'
+
+    // Function to check authentication status and refresh user data
+    const checkAuth = async () => {
+        try {
+            const response = await $fetch<AuthResponse>(`${baseURL}/auth/me`, {
+                method: 'GET',
+                credentials: 'include',
+            })
+
+            user.value = response.user
+            return true
+        } catch (error) {
+            user.value = null
+            return false
+        }
+    }
 
     const register = async (userData: {
         email: string
@@ -79,15 +113,25 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const response = await $fetch<AuthResponse>(`${baseURL}/auth/login`, {
                 method: 'POST',
-                body: credentials
+                body: credentials,
+                credentials: 'include'
             })
 
-            token.value = response.token
+            token.value = response.accessToken
             refreshToken.value = response.refreshToken
             user.value = response.user
 
+            // Verify authentication state
+            console.log("After login - isAuthenticated:", isAuthenticated.value)
+            console.log('Login successful:', {
+                tokenSet: !!token.value,
+                userSet: !!user.value,
+                userRoles: user.value?.roles
+            })
+
             return response
         } catch (error) {
+            console.error('Login error:', error)
             throw error
         }
     }
@@ -99,7 +143,8 @@ export const useAuthStore = defineStore('auth', () => {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${token.value}`
-                    }
+                    },
+                    credentials: 'include'
                 })
             }
         } finally {
@@ -156,6 +201,7 @@ export const useAuthStore = defineStore('auth', () => {
         user,
         isAuthenticated,
         pendingEmail,
+        checkAuth,
         register,
         verifyEmail,
         resendVerification,

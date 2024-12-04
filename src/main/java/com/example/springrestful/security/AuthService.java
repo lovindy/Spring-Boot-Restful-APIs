@@ -3,7 +3,6 @@ package com.example.springrestful.security;
 import com.example.springrestful.dto.AuthResponse;
 import com.example.springrestful.dto.LoginRequest;
 import com.example.springrestful.dto.UserRegistrationRequest;
-import com.example.springrestful.entity.Organization;
 import com.example.springrestful.entity.User;
 import com.example.springrestful.enums.UserRole;
 import com.example.springrestful.exception.UserAuthenticationException;
@@ -13,6 +12,7 @@ import com.example.springrestful.repository.AuthRepository;
 import com.example.springrestful.repository.OrganizationRepository;
 import com.example.springrestful.service.impl.CustomUserDetailsImpl;
 import com.example.springrestful.util.JwtUtil;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,12 +69,37 @@ public class AuthService {
      */
     public Long getCurrentUserId() throws AccessDeniedException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new AccessDeniedException("User not authenticated");
         }
 
-        CustomUserDetailsImpl userDetails = (CustomUserDetailsImpl) authentication.getPrincipal();
-        return userDetails.getId();
+        Object principal = authentication.getPrincipal();
+
+        // Check if the principal is an instance of CustomUserDetailsImpl
+        if (principal instanceof CustomUserDetailsImpl) {
+            return ((CustomUserDetailsImpl) principal).getId();
+        } else if (principal instanceof String) {
+            // Handle cases where the principal is a String (e.g., username)
+            String username = (String) principal;
+            User user = authRepository.findByUsername(username)
+                    .orElseThrow(() -> new AccessDeniedException("User not found"));
+            return user.getId();
+        } else {
+            throw new AccessDeniedException("Unexpected principal type");
+        }
+    }
+
+    public AuthResponse getCurrentUserDetails() throws AccessDeniedException {
+        Long userId = getCurrentUserId();
+        User user = authRepository.findById(userId)
+                .orElseThrow(() -> new AccessDeniedException("User not found"));
+
+        // Map the User entity to AuthResponse
+        return AuthResponse.builder()
+                .user(AuthMapper.toResponse(user)) // Assuming `toResponse` converts the user entity to a DTO
+                .message("User authenticated successfully")
+                .build();
     }
 
     /**
@@ -306,7 +331,7 @@ public class AuthService {
      * Login method
      */
     @Transactional
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request, HttpServletResponse response) {
         try {
             log.info("🔍 Starting login process for email: {}", request.getEmail());
 
@@ -341,6 +366,10 @@ public class AuthService {
             String accessToken = jwtUtil.generateToken(userDetails);
             String refreshToken = jwtUtil.generateRefreshToken(userDetails);
 
+            // Set tokens in cookies instead of returning them in the response
+            jwtUtil.generateToken(userDetails, response);
+            jwtUtil.generateRefreshToken(userDetails, response);
+
             log.info("✅ Login successful for email: {}", request.getEmail());
 
             return AuthResponse.builder()
@@ -366,15 +395,19 @@ public class AuthService {
     /**
      * Logout method
      */
-    public AuthResponse logout(String token) {
+    public AuthResponse logout(String token, HttpServletResponse response) {
         try {
             log.info("🔒 Starting logout process.");
 
-            String username = jwtUtil.extractUsername(token);
-            jwtUtil.invalidateAllUserSessions(username);
-            jwtUtil.invalidateToken(token);
+            // Extract current token from SecurityContextHolder or pass it as a parameter
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication.getName();
 
-            log.info("✅ Logout successful for user: {}", username);
+            // Invalidate sessions
+            jwtUtil.invalidateAllUserSessions(username);
+
+            // Clear authentication cookies
+            jwtUtil.clearAuthenticationCookies(response);
 
             return AuthResponse.builder()
                     .message("Logout successful!")

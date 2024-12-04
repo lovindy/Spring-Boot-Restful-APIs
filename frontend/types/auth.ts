@@ -1,13 +1,18 @@
 export interface AuthResponse {
-    token: string;
+    accessToken: string;
     refreshToken: string;
     user: {
         id: number;
         email: string;
         username: string;
-        role: 'ADMIN' | 'EMPLOYEE';
+        roles: string[];
+        emailVerified: boolean;
+        twoFactorAuthEnabled: boolean;
+        managedEmployeesCount: number;
     }
+    message?: string;
 }
+
 export interface LoginForm {
     email: string,
     password: string

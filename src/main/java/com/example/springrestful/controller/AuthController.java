@@ -3,10 +3,14 @@ package com.example.springrestful.controller;
 import com.example.springrestful.dto.*;
 import com.example.springrestful.security.AuthService;
 import com.example.springrestful.util.JwtUtil;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.nio.file.AccessDeniedException;
 
 @RestController
 @CrossOrigin
@@ -40,18 +44,43 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request) {
-        return ResponseEntity.ok(authService.login(request));
+    public ResponseEntity<AuthResponse> login(
+            @RequestBody @Valid LoginRequest request,
+            HttpServletResponse response
+    ) {
+        return ResponseEntity.ok(authService.login(request, response));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<AuthResponse> logout(@RequestHeader("Authorization") String token) {
-        return ResponseEntity.ok(authService.logout(token.substring(7)));
+    public ResponseEntity<AuthResponse> logout(
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) {
+        // Extract token from request
+        String token = jwtUtil.extractTokenFromRequest(request);
+
+        // Perform logout logic
+        AuthResponse authResponse = authService.logout(token, response);
+
+        return ResponseEntity.ok(authResponse);
     }
 
     @PostMapping("/refresh-token")
-    public ResponseEntity<AuthResponse> refreshToken(@RequestHeader("Authorization") String refreshToken) {
-        return ResponseEntity.ok(authService.refreshToken(refreshToken.substring(7)));
+    public ResponseEntity<AuthResponse> refreshToken(
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) {
+        // Extract refresh token from request
+        String refreshToken = jwtUtil.extractTokenFromRequest(request);
+
+        // Refresh token logic
+        AuthResponse authResponse = authService.refreshToken(refreshToken);
+
+        // Set new tokens in cookies
+        jwtUtil.setAccessTokenCookie(response, authResponse.getAccessToken());
+        jwtUtil.setRefreshTokenCookie(response, authResponse.getRefreshToken());
+
+        return ResponseEntity.ok(authResponse);
     }
 
     @PostMapping("/forgot-password")
@@ -79,5 +108,17 @@ public class AuthController {
                 request.getCurrentPassword(),
                 request.getNewPassword()
         ));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<AuthResponse> getCurrentUser() {
+        try {
+            AuthResponse authResponse = authService.getCurrentUserDetails();
+            return ResponseEntity.ok(authResponse);
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(AuthResponse.builder()
+                    .message("User not authenticated")
+                    .build());
+        }
     }
 }
