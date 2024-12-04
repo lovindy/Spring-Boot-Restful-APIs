@@ -67,14 +67,49 @@ public class AuthService {
     /**
      * Get the current login user id
      */
+//    public Long getCurrentUserId() throws AccessDeniedException {
+//        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+//        if (authentication == null || !authentication.isAuthenticated()) {
+//            throw new AccessDeniedException("User not authenticated");
+//        }
+//
+//        CustomUserDetailsImpl userDetails = (CustomUserDetailsImpl) authentication.getPrincipal();
+//        return userDetails.getId();
+//    }
+
     public Long getCurrentUserId() throws AccessDeniedException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new AccessDeniedException("User not authenticated");
         }
 
-        CustomUserDetailsImpl userDetails = (CustomUserDetailsImpl) authentication.getPrincipal();
-        return userDetails.getId();
+        Object principal = authentication.getPrincipal();
+
+        // Check if the principal is an instance of CustomUserDetailsImpl
+        if (principal instanceof CustomUserDetailsImpl) {
+            return ((CustomUserDetailsImpl) principal).getId();
+        } else if (principal instanceof String) {
+            // Handle cases where the principal is a String (e.g., username)
+            String username = (String) principal;
+            User user = authRepository.findByUsername(username)
+                    .orElseThrow(() -> new AccessDeniedException("User not found"));
+            return user.getId();
+        } else {
+            throw new AccessDeniedException("Unexpected principal type");
+        }
+    }
+
+    public AuthResponse getCurrentUserDetails() throws AccessDeniedException {
+        Long userId = getCurrentUserId();
+        User user = authRepository.findById(userId)
+                .orElseThrow(() -> new AccessDeniedException("User not found"));
+
+        // Map the User entity to AuthResponse
+        return AuthResponse.builder()
+                .user(AuthMapper.toResponse(user)) // Assuming `toResponse` converts the user entity to a DTO
+                .message("User authenticated successfully")
+                .build();
     }
 
     /**

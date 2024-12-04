@@ -13,6 +13,22 @@ export const useAuthStore = defineStore('auth', () => {
     const config = useRuntimeConfig()
     const baseURL = config.public.apiBase || 'http://localhost:8080/api/v1'
 
+    // Function to check authentication status and refresh user data
+    const checkAuth = async () => {
+        try {
+            const response = await $fetch<AuthResponse>(`${baseURL}/auth/me`, {
+                method: 'GET',
+                credentials: 'include',
+            })
+
+            user.value = response.user
+            return true
+        } catch (error) {
+            user.value = null
+            return false
+        }
+    }
+
     const register = async (userData: {
         email: string
         username: string
@@ -79,7 +95,8 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const response = await $fetch<AuthResponse>(`${baseURL}/auth/login`, {
                 method: 'POST',
-                body: credentials
+                body: credentials,
+                credentials: 'include'
             })
 
             token.value = response.token
@@ -99,7 +116,8 @@ export const useAuthStore = defineStore('auth', () => {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${token.value}`
-                    }
+                    },
+                    credentials: 'include'
                 })
             }
         } finally {
@@ -156,6 +174,7 @@ export const useAuthStore = defineStore('auth', () => {
         user,
         isAuthenticated,
         pendingEmail,
+        checkAuth,
         register,
         verifyEmail,
         resendVerification,

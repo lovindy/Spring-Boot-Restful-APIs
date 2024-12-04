@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.AccessDeniedException;
+
 @RestController
 @CrossOrigin
 @RequestMapping("/api/v1/auth")
@@ -80,4 +82,17 @@ public class AuthController {
                 request.getNewPassword()
         ));
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<AuthResponse> getCurrentUser() {
+        try {
+            AuthResponse authResponse = authService.getCurrentUserDetails();
+            return ResponseEntity.ok(authResponse);
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(AuthResponse.builder()
+                    .message("User not authenticated")
+                    .build());
+        }
+    }
+
 }
