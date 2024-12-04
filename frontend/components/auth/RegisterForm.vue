@@ -80,7 +80,6 @@ import {ref, reactive, onMounted} from 'vue'
 import {registerSchema} from "~/validators/auth";
 import type {RegisterForm} from "~/types/auth";
 
-
 const isLoading = ref(false)
 const mounted = ref(false)
 
