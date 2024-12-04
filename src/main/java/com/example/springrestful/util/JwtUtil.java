@@ -4,12 +4,15 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.util.WebUtils;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -37,18 +40,17 @@ public class JwtUtil {
     @Value("${jwt.redis.prefix.user-sessions}")
     private String userSessionsPrefix;
 
+    // Cookie configuration constants
+    private static final String ACCESS_TOKEN_COOKIE_NAME = "access_token";
+    private static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
+    private static final boolean USE_HTTP_ONLY = true;
+    private static final boolean USE_SECURE = true;
+    private static final String COOKIE_PATH = "/";
+
     private final RedisTemplate<String, String> redisTemplate;
 
     public JwtUtil(RedisTemplate<String, String> redisTemplate) {
         this.redisTemplate = redisTemplate;
-    }
-
-    public String extractTokenFromRequest(HttpServletRequest request) {
-        String bearerToken = request.getHeader("Authorization");
-        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
-        }
-        return null;
     }
 
     private SecretKey getSigningKey() {
@@ -81,19 +83,91 @@ public class JwtUtil {
         return extractExpiration(token).before(new Date());
     }
 
-    public String generateToken(UserDetails userDetails) {
+    // Method to extract token from either Authorization header or Cookie
+    public String extractTokenFromRequest(HttpServletRequest request) {
+        // First, try to extract from Authorization header
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+
+        // If not found in header, try to extract from cookies
+        Cookie tokenCookie = WebUtils.getCookie(request, ACCESS_TOKEN_COOKIE_NAME);
+        if (tokenCookie != null && StringUtils.hasText(tokenCookie.getValue())) {
+            return tokenCookie.getValue();
+        }
+
+        return null;
+    }
+
+    // New method to set access token in HTTP-only cookie
+    public void setAccessTokenCookie(HttpServletResponse response, String token) {
+        Cookie cookie = new Cookie(ACCESS_TOKEN_COOKIE_NAME, token);
+        cookie.setHttpOnly(USE_HTTP_ONLY);
+        cookie.setSecure(USE_SECURE);
+        cookie.setPath(COOKIE_PATH);
+        cookie.setMaxAge((int) (accessTokenExpiration / 1000)); // Convert milliseconds to seconds
+        response.addCookie(cookie);
+    }
+
+    // New method to set refresh token in HTTP-only cookie
+    public void setRefreshTokenCookie(HttpServletResponse response, String token) {
+        Cookie cookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, token);
+        cookie.setHttpOnly(USE_HTTP_ONLY);
+        cookie.setSecure(USE_SECURE);
+        cookie.setPath(COOKIE_PATH);
+        cookie.setMaxAge((int) (refreshTokenExpiration / 1000)); // Convert milliseconds to seconds
+        response.addCookie(cookie);
+    }
+
+    // Method to clear authentication cookies
+    public void clearAuthenticationCookies(HttpServletResponse response) {
+        Cookie accessTokenCookie = new Cookie(ACCESS_TOKEN_COOKIE_NAME, null);
+        accessTokenCookie.setMaxAge(0);
+        accessTokenCookie.setPath(COOKIE_PATH);
+
+        Cookie refreshTokenCookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, null);
+        refreshTokenCookie.setMaxAge(0);
+        refreshTokenCookie.setPath(COOKIE_PATH);
+
+        response.addCookie(accessTokenCookie);
+        response.addCookie(refreshTokenCookie);
+    }
+
+    // Overloaded methods to set tokens in cookies with response parameter
+    public String generateToken(UserDetails userDetails, HttpServletResponse response) {
         Map<String, Object> claims = new HashMap<>();
         String token = createToken(claims, userDetails.getUsername(), accessTokenExpiration);
         storeUserSession(userDetails.getUsername(), token, accessTokenExpiration);
+
+        // Set the token in a cookie
+        setAccessTokenCookie(response, token);
+
         return token;
+    }
+
+    public String generateRefreshToken(UserDetails userDetails, HttpServletResponse response) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("tokenType", "refresh");
+        String token = createToken(claims, userDetails.getUsername(), refreshTokenExpiration);
+        storeUserSession(userDetails.getUsername(), token, refreshTokenExpiration);
+
+        // Set the refresh token in a cookie
+        setRefreshTokenCookie(response, token);
+
+        return token;
+    }
+
+    // Original methods to maintain backward compatibility
+    public String generateToken(UserDetails userDetails) {
+        Map<String, Object> claims = new HashMap<>();
+        return createToken(claims, userDetails.getUsername(), accessTokenExpiration);
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("tokenType", "refresh");
-        String token = createToken(claims, userDetails.getUsername(), refreshTokenExpiration);
-        storeUserSession(userDetails.getUsername(), token, refreshTokenExpiration);
-        return token;
+        return createToken(claims, userDetails.getUsername(), refreshTokenExpiration);
     }
 
     private String createToken(Map<String, Object> claims, String subject, long expiration) {

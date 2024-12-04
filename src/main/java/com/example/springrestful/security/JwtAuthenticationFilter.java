@@ -46,12 +46,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
+            // Extract token from either Authorization header or Cookie
             final String jwt = jwtUtil.extractTokenFromRequest(request);
 
             if (jwt != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 // Check if token is blacklisted
                 if (jwtUtil.isTokenBlacklisted(jwt)) {
                     logger.warn("Attempted to use blacklisted token");
+                    jwtUtil.clearAuthenticationCookies(response);
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     return;
                 }
@@ -71,6 +73,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         SecurityContextHolder.getContext().setAuthentication(authToken);
                     } else {
                         // Token validation failed
+                        jwtUtil.clearAuthenticationCookies(response);
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                         return;
                     }
