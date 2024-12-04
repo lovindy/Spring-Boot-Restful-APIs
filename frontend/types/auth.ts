@@ -17,3 +17,7 @@ export interface RegisterForm {
     password: string
     confirmPassword: string
 }
+
+export interface ForgotPasswordForm {
+    email: string
+}

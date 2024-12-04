@@ -45,12 +45,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { forgotPasswordSchema } from "~/validators/auth"
-
-interface ForgotPasswordForm {
-  email: string
-}
+import {ref, reactive, onMounted} from 'vue'
+import {forgotPasswordSchema} from "~/validators/auth"
+import type {ForgotPasswordForm} from "~/types/auth"
 
 const mounted = ref(false)
 const isLoading = ref(false)
@@ -60,9 +57,9 @@ const formState = reactive<ForgotPasswordForm>({
 })
 
 // Initialize auth store inside setup
-const { $pinia } = useNuxtApp()
+const {$pinia} = useNuxtApp()
 const auth = useAuthStore($pinia)
-const { add: addToast } = useToast()
+const {add: addToast} = useToast()
 
 onMounted(() => {
   mounted.value = true
