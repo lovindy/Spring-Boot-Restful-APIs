@@ -4,54 +4,6 @@ import {defineStore} from 'pinia'
 import type {AuthResponse} from '@/types/auth'
 
 export const useAuthStore = defineStore('auth', () => {
-    // const token = ref<string | null>(null)
-    // const refreshToken = ref<string | null>(null)
-    // const user = ref<any | null>(null)
-    // const isAuthenticated = computed(() => !!token.value)
-    //
-    // const config = useRuntimeConfig()
-    // const baseURL = config.public.apiBase || 'http://localhost:8080/api/v1'
-    //
-    // const register = async (userData: {
-    //     email: string
-    //     username: string
-    //     password: string
-    // }) => {
-    //     try {
-    //         const response = await $fetch<AuthResponse>(`${baseURL}/auth/register`, {
-    //             method: 'POST',
-    //             body: userData
-    //         })
-    //         return response
-    //     } catch (error) {
-    //         throw error
-    //     }
-    // }
-    //
-    // const verifyEmail = async (email: string, verificationCode: string) => {
-    //     try {
-    //         const response = await $fetch<AuthResponse>(`${baseURL}/auth/verify-email`, {
-    //             method: 'POST',
-    //             body: {email, verificationCode}
-    //         })
-    //         return response
-    //     } catch (error) {
-    //         throw error
-    //     }
-    // }
-    //
-    // const resendVerification = async (email: string) => {
-    //     try {
-    //         const response = await $fetch<AuthResponse>(`${baseURL}/auth/resend-verification`, {
-    //             method: 'POST',
-    //             body: {email}
-    //         })
-    //         return response
-    //     } catch (error) {
-    //         throw error
-    //     }
-    // }
-
     const token = ref<string | null>(null)
     const refreshToken = ref<string | null>(null)
     const user = ref<any | null>(null)
