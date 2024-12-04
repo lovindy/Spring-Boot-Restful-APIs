@@ -14,7 +14,4 @@ export default defineNuxtConfig({
     experimental: {
         typedPages: true,
     },
-    router: {
-        middleware: ['auth-layout', 'dashboard-layout']
-    }
 })

@@ -2,7 +2,7 @@
 <template>
   <div>
     <!-- employee dashboard content -->
-    <h1>Employee Dashboard</h1>
+    <h1 class="text-black">Employee Dashboard</h1>
     <!-- ... -->
   </div>
 </template>

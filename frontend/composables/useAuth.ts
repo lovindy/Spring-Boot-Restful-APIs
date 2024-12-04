@@ -7,8 +7,26 @@ export const useAuthStore = defineStore('auth', () => {
     const token = ref<string | null>(null)
     const refreshToken = ref<string | null>(null)
     const user = ref<any | null>(null)
-    const pendingEmail = ref<string | null>(null) // New ref to store email during registration
-    const isAuthenticated = computed(() => !!token.value)
+    const pendingEmail = ref<string | null>(null)
+
+    // Check the user authentication
+    const isAuthenticated = computed(() => {
+        const isValid = !!(
+            token.value &&
+            user.value &&
+            user.value.roles &&
+            user.value.roles.length > 0
+        )
+
+        console.log('Authentication state:', {
+            tokenExists: !!token.value,
+            userExists: !!user.value,
+            userRoles: user.value?.roles,
+            isAuthenticated: isValid
+        })
+
+        return isValid
+    })
 
     const config = useRuntimeConfig()
     const baseURL = config.public.apiBase || 'http://localhost:8080/api/v1'
@@ -99,12 +117,21 @@ export const useAuthStore = defineStore('auth', () => {
                 credentials: 'include'
             })
 
-            token.value = response.token
+            token.value = response.accessToken
             refreshToken.value = response.refreshToken
             user.value = response.user
 
+            // Verify authentication state
+            console.log("After login - isAuthenticated:", isAuthenticated.value)
+            console.log('Login successful:', {
+                tokenSet: !!token.value,
+                userSet: !!user.value,
+                userRoles: user.value?.roles
+            })
+
             return response
         } catch (error) {
+            console.error('Login error:', error)
             throw error
         }
     }
