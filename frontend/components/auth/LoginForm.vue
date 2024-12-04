@@ -53,7 +53,11 @@ const onSubmit = async () => {
       email: form.email,
       password: form.password
     })
-    navigateTo('/dashboard')
+    if (auth.user?.role === 'ADMIN') {
+      navigateTo('/admin/dashboard')
+    } else {
+      navigateTo('/employee/dashboard')
+    }
   } catch (error: any) {
     useToast().add({
       title: 'Error',
