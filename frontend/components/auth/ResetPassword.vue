@@ -3,7 +3,7 @@
 </script>
 
 <template>
-  <div>This is Admin Dashboard</div>
+  <div class="text-black">N</div>
 </template>
 
 <style scoped>
