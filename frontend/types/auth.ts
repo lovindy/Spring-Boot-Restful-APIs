@@ -5,3 +5,15 @@ export interface AuthResponse {
         email: string
     }
 }
+
+export interface LoginForm {
+    email: string,
+    password: string
+}
+
+export interface RegisterForm {
+    email: string
+    username: string
+    password: string
+    confirmPassword: string
+}

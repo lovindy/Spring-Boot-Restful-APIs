@@ -4,7 +4,6 @@ export default defineNuxtConfig({
         '@pinia/nuxt',
         '@vee-validate/nuxt'
     ],
-    // plugins: ['~/plugins/auth.client.ts'],
     compatibilityDate: '2024-12-02',
     runtimeConfig: {
         public: {
