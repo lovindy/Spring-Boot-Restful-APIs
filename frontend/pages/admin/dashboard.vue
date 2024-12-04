@@ -1,11 +1,14 @@
-<script setup lang="ts">
-
-</script>
-
+<!-- pages/admin/dashboard.vue -->
 <template>
-  <div class="text-black">This is the admin dashboard</div>
+  <div>
+    <!-- admin dashboard content -->
+    <h1 class="text-black">Admin Dashboard</h1>
+    <!-- ... -->
+  </div>
 </template>
 
-<style scoped>
-
-</style>
+<script setup>
+definePageMeta({
+  layout: 'dashboard'
+})
+</script>

@@ -23,7 +23,7 @@ export default defineNuxtRouteMiddleware((to) => {
             return navigateTo('/employee/dashboard')
         } else {
             console.log('User has an unknown role:', auth.user?.role);
-            return navigateTo('/dashboard')
+            return navigateTo('/unauthorized')
         }
     }
 
@@ -36,11 +36,11 @@ export default defineNuxtRouteMiddleware((to) => {
     // Handle role-based access
     if (to.path.startsWith('/admin') && auth.user?.role !== 'ADMIN') {
         console.log('User is trying to access an admin route but is not an admin');
-        return navigateTo('/dashboard')
+        return navigateTo('/unauthorized')
     }
 
     if (to.path.startsWith('/employee') && auth.user?.role !== 'EMPLOYEE') {
         console.log('User is trying to access an employee route but is not an employee');
-        return navigateTo('/dashboard')
+        return navigateTo('/unauthorized')
     }
 })
