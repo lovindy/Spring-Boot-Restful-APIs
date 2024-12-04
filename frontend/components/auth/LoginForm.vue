@@ -116,10 +116,11 @@ const onSubmit = async () => {
       email: formState.email,
       password: formState.password
     })
+    console.log("User data login request: ",user.value)
 
-    const redirectPath = user.value?.role === 'ADMIN'
+    const redirectPath = user.value?.roles.includes('ADMIN')
         ? '/admin/dashboard'
-        : '/employee/dashboard'
+        : '/employee/dashboard';
 
     await navigateTo(redirectPath)
   } catch (error) {

@@ -3,7 +3,7 @@
 </script>
 
 <template>
-  <div>This is the admin dashboard</div>
+  <div class="text-black">This is the admin dashboard</div>
 </template>
 
 <style scoped>

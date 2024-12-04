@@ -1,11 +1,13 @@
 export interface AuthResponse {
-    token: string
-    refreshToken: string
+    token: string;
+    refreshToken: string;
     user: {
-        email: string
+        id: number;
+        email: string;
+        username: string;
+        role: 'ADMIN' | 'EMPLOYEE';
     }
 }
-
 export interface LoginForm {
     email: string,
     password: string
