@@ -5,7 +5,8 @@
       <h2 class="text-2xl font-semibold mb-6">Verify Email</h2>
 
       <p class="text-gray-600 mb-6">
-        Please enter the verification code sent to your email.
+        Please enter the verification code sent to
+        <span class="font-semibold">{{ emailToVerify }}</span>
       </p>
 
       <UFormGroup label="Verification Code" name="code">
@@ -44,6 +45,11 @@ const auth = useAuthStore()
 const loading = ref(false)
 const resendLoading = ref(false)
 
+// Compute the email to use for verification
+const emailToVerify = computed(() =>
+    auth.pendingEmail || auth.user?.email || 'Unknown Email'
+)
+
 const form = reactive({
   code: ''
 })
@@ -51,12 +57,22 @@ const form = reactive({
 const onSubmit = async () => {
   try {
     loading.value = true
-    await auth.verifyEmail(auth.user?.email || '', form.code)
+
+    // Use computed email value
+    await auth.verifyEmail(emailToVerify.value, form.code)
+
+    // Show success toast
+    useToast().add({
+      title: 'Success',
+      description: 'Email verified successfully',
+      color: 'green'
+    })
+
     navigateTo('/')
   } catch (error: any) {
     useToast().add({
-      title: 'Error',
-      description: error.message || 'Verification failed',
+      title: 'Verification Failed',
+      description: error.message || 'Unable to verify email',
       color: 'red'
     })
   } finally {
@@ -67,20 +83,35 @@ const onSubmit = async () => {
 const resendCode = async () => {
   try {
     resendLoading.value = true
-    await auth.resendVerification(auth.user?.email || '')
+
+    // Use computed email value
+    await auth.resendVerification(emailToVerify.value)
+
     useToast().add({
-      title: 'Success',
-      description: 'Verification code resent',
+      title: 'Verification Code Resent',
+      description: `A new verification code has been sent to ${emailToVerify.value}`,
       color: 'green'
     })
   } catch (error: any) {
     useToast().add({
-      title: 'Error',
-      description: error.message || 'Failed to resend code',
+      title: 'Resend Failed',
+      description: error.message || 'Failed to resend verification code',
       color: 'red'
     })
   } finally {
     resendLoading.value = false
   }
 }
+
+// Redirect if no email is available for verification
+onMounted(() => {
+  if (!emailToVerify.value || emailToVerify.value === 'Unknown Email') {
+    useToast().add({
+      title: 'Error',
+      description: 'No email available for verification',
+      color: 'red'
+    })
+    navigateTo('/auth/register')
+  }
+})
 </script>
