@@ -8,24 +8,40 @@ export const useAuthStore = defineStore('auth', () => {
     const refreshToken = ref<string | null>(null)
     const user = ref<any | null>(null)
     const pendingEmail = ref<string | null>(null)
+    const isInitialized = ref(false)
 
     // Check the user authentication
     const isAuthenticated = computed(() => {
-        const isValid = !!(
-            token.value &&
+        const isValid = (
             user.value &&
             user.value.roles &&
             user.value.roles.length > 0
         )
 
         console.log('Authentication state:', {
-            tokenExists: !!token.value,
             userExists: !!user.value,
             userRoles: user.value?.roles,
-            isAuthenticated: isValid
+            isAuthenticated: isValid,
+            isInitialized: isInitialized.value
         })
 
         return isValid
+    })
+
+
+    // Add helper function to determine user's dashboard route
+    const getDashboardRoute = computed(() => {
+        if (!user.value?.roles) return '/auth/login'
+
+        if (user.value.roles.includes('ADMIN')) {
+            return '/admin/dashboard'
+        }
+
+        if (user.value.roles.includes('EMPLOYEE')) {
+            return '/employee/dashboard'
+        }
+
+        return '/unauthorized'
     })
 
     const config = useRuntimeConfig()
@@ -34,15 +50,23 @@ export const useAuthStore = defineStore('auth', () => {
     // Function to check authentication status and refresh user data
     const checkAuth = async () => {
         try {
-            const response = await $fetch<AuthResponse>(`${baseURL}/auth/me`, {
-                method: 'GET',
-                credentials: 'include',
-            })
+            if (!isInitialized.value) {
+                console.log('Checking authentication status...')
+                const response = await $fetch<AuthResponse>(`${baseURL}/auth/me`, {
+                    method: 'GET',
+                    credentials: 'include',
+                })
 
-            user.value = response.user
-            return true
+                user.value = response.user
+                isInitialized.value = true
+                console.log('Auth check successful:', response.user)
+                return true
+            }
+            return isAuthenticated.value
         } catch (error) {
+            console.error('Auth check failed:', error)
             user.value = null
+            isInitialized.value = true
             return false
         }
     }
@@ -117,17 +141,16 @@ export const useAuthStore = defineStore('auth', () => {
                 credentials: 'include'
             })
 
-            token.value = response.accessToken
-            refreshToken.value = response.refreshToken
             user.value = response.user
+            isInitialized.value = true
 
-            // Verify authentication state
-            console.log("After login - isAuthenticated:", isAuthenticated.value)
-            console.log('Login successful:', {
-                tokenSet: !!token.value,
-                userSet: !!user.value,
-                userRoles: user.value?.roles
-            })
+            if (isAuthenticated.value) {
+                const redirectPath = user.value?.roles.includes('ADMIN')
+                    ? '/admin/dashboard'
+                    : '/employee/dashboard'
+
+                navigateTo(redirectPath)
+            }
 
             return response
         } catch (error) {
@@ -138,19 +161,14 @@ export const useAuthStore = defineStore('auth', () => {
 
     const logout = async () => {
         try {
-            if (token.value) {
-                await $fetch(`${baseURL}/auth/logout`, {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${token.value}`
-                    },
-                    credentials: 'include'
-                })
-            }
+            await $fetch(`${baseURL}/auth/logout`, {
+                method: 'POST',
+                credentials: 'include'
+            })
         } finally {
-            token.value = null
-            refreshToken.value = null
             user.value = null
+            isInitialized.value = false
+            navigateTo('/auth/login')
         }
     }
 
@@ -178,16 +196,15 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    // Update changePassword to use cookie authentication
     const changePassword = async (currentPassword: string, newPassword: string) => {
         try {
-            if (!token.value || !user.value?.email) throw new Error('Not authenticated')
+            if (!user.value?.email) throw new Error('Not authenticated')
 
             const response = await $fetch<AuthResponse>(`${baseURL}/auth/change-password`, {
                 method: 'POST',
                 body: {currentPassword, newPassword},
-                headers: {
-                    Authorization: `Bearer ${token.value}`
-                }
+                credentials: 'include'  // Use cookies for authentication
             })
             return response
         } catch (error) {
@@ -200,6 +217,7 @@ export const useAuthStore = defineStore('auth', () => {
         refreshToken,
         user,
         isAuthenticated,
+        isInitialized,
         pendingEmail,
         checkAuth,
         register,
