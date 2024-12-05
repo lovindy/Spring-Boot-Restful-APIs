@@ -19,7 +19,7 @@ export default defineNuxtConfig({
     app: {
         // Configure app head metadata
         head: {
-            title: 'Your App Name',
+            title: 'Talentexis',
             titleTemplate: '%s - Your App Name',
             meta: [
                 {charset: 'utf-8'},
