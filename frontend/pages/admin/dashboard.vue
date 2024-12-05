@@ -23,10 +23,6 @@ const {user, checkAuth} = useAuthStore();
 // Set page layout metadata
 definePageMeta({
   layout: 'dashboard',
-  async setup() {
-    const {prefetchAuth} = useAuthStore();
-    await prefetchAuth();
-  },
 });
 
 // Ensure authentication check runs after component mounts

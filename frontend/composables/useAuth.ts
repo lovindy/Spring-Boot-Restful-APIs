@@ -45,12 +45,6 @@ export const useAuthStore = defineStore('auth', () => {
         return hasValidUser
     })
 
-    const prefetchAuth = async () => {
-        if (!isInitialized.value) {
-            await checkAuth();
-        }
-    };
-
     /**
      * Determines the appropriate dashboard route based on user role
      * @returns {string} Dashboard route path
@@ -239,7 +233,6 @@ export const useAuthStore = defineStore('auth', () => {
     // Return store interface
     return {
         ...state,
-        prefetchAuth,
         isAuthenticated,
         getDashboardRoute,
         ...authApi
