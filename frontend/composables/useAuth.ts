@@ -1,232 +1,240 @@
 // composables/useAuth.ts
-import {ref, computed} from 'vue'
-import {defineStore} from 'pinia'
-import type {AuthResponse} from '@/types/auth'
+import { ref, computed } from 'vue'
+import { defineStore } from 'pinia'
+import type { AuthResponse } from '@/types/auth'
 
+/**
+ * Authentication store using Pinia
+ * Handles user authentication state and related operations including:
+ * - User registration and email verification
+ * - Login/logout functionality
+ * - Password management (reset, change, forgot)
+ * - Authentication state checking
+ */
 export const useAuthStore = defineStore('auth', () => {
-    const token = ref<string | null>(null)
-    const refreshToken = ref<string | null>(null)
-    const user = ref<any | null>(null)
-    const pendingEmail = ref<string | null>(null)
-    const isInitialized = ref(false)
+    // State Management
+    const state = {
+        token: ref<string | null>(null),
+        refreshToken: ref<string | null>(null),
+        user: ref<any | null>(null),
+        pendingEmail: ref<string | null>(null),
+        isInitialized: ref(false)
+    }
 
-    // Check the user authentication
+    // Runtime Configuration
+    const config = useRuntimeConfig()
+    const API_BASE_URL = config.public.apiBase || 'http://localhost:8080/api/v1'
+
+    /**
+     * Computed property to check if user is authenticated
+     * Validates user existence and role assignments
+     */
     const isAuthenticated = computed(() => {
-        const isValid = (
-            user.value &&
-            user.value.roles &&
-            user.value.roles.length > 0
-        )
+        const hasValidUser = state.user.value &&
+            state.user.value.roles &&
+            state.user.value.roles.length > 0
 
+        // Debug logging for authentication state
         console.log('Authentication state:', {
-            userExists: !!user.value,
-            userRoles: user.value?.roles,
-            isAuthenticated: isValid,
-            isInitialized: isInitialized.value
+            userExists: !!state.user.value,
+            userRoles: state.user.value?.roles,
+            isAuthenticated: hasValidUser,
+            isInitialized: state.isInitialized.value
         })
 
-        return isValid
+        return hasValidUser
     })
 
-
-    // Add helper function to determine user's dashboard route
+    /**
+     * Determines the appropriate dashboard route based on user role
+     * @returns {string} Dashboard route path
+     */
     const getDashboardRoute = computed(() => {
-        if (!user.value?.roles) return '/auth/login'
+        if (!state.user.value?.roles) return '/auth/login'
 
-        if (user.value.roles.includes('ADMIN')) {
-            return '/admin/dashboard'
-        }
-
-        if (user.value.roles.includes('EMPLOYEE')) {
-            return '/employee/dashboard'
-        }
+        const userRoles = state.user.value.roles
+        if (userRoles.includes('ADMIN')) return '/admin/dashboard'
+        if (userRoles.includes('EMPLOYEE')) return '/employee/dashboard'
 
         return '/unauthorized'
     })
 
-    const config = useRuntimeConfig()
-    const baseURL = config.public.apiBase || 'http://localhost:8080/api/v1'
+    /**
+     * Authentication API Methods
+     */
+    const authApi = {
+        /**
+         * Verifies current authentication status
+         * Fetches user data if not initialized
+         * @returns {Promise<boolean>} Authentication status
+         */
+        async checkAuth(): Promise<boolean> {
+            try {
+                if (!state.isInitialized.value) {
+                    console.log('Checking authentication status...')
+                    const response = await $fetch<AuthResponse>(`${API_BASE_URL}/auth/me`, {
+                        method: 'GET',
+                        credentials: 'include',
+                    })
 
-    // Function to check authentication status and refresh user data
-    const checkAuth = async () => {
-        try {
-            if (!isInitialized.value) {
-                console.log('Checking authentication status...')
-                const response = await $fetch<AuthResponse>(`${baseURL}/auth/me`, {
-                    method: 'GET',
-                    credentials: 'include',
+                    state.user.value = response.user
+                    state.isInitialized.value = true
+                    console.log('Auth check successful:', response.user)
+                    return true
+                }
+                return isAuthenticated.value
+            } catch (error) {
+                console.error('Auth check failed:', error)
+                state.user.value = null
+                state.isInitialized.value = true
+                return false
+            }
+        },
+
+        /**
+         * Registers a new user
+         * @param userData User registration data
+         */
+        async register(userData: { email: string; username: string; password: string }) {
+            try {
+                const response = await $fetch<AuthResponse>(`${API_BASE_URL}/auth/register`, {
+                    method: 'POST',
+                    body: userData
+                })
+                state.pendingEmail.value = userData.email
+                return response
+            } catch (error) {
+                throw error
+            }
+        },
+
+        /**
+         * Verifies user email with verification code
+         * @param email User email (optional if pendingEmail exists)
+         * @param verificationCode Email verification code
+         */
+        async verifyEmail(email: string, verificationCode: string) {
+            const emailToVerify = email || state.pendingEmail.value
+            if (!emailToVerify) throw new Error('No email available for verification')
+
+            try {
+                const response = await $fetch<AuthResponse>(`${API_BASE_URL}/auth/verify-email`, {
+                    method: 'POST',
+                    body: { email: emailToVerify, verificationCode }
+                })
+                state.pendingEmail.value = null
+                return response
+            } catch (error) {
+                throw error
+            }
+        },
+
+        /**
+         * Resends email verification code
+         * @param email User email (optional if pendingEmail exists)
+         */
+        async resendVerification(email: string) {
+            const emailToResend = email || state.pendingEmail.value
+            if (!emailToResend) throw new Error('No email available for resending verification')
+
+            try {
+                return await $fetch<AuthResponse>(`${API_BASE_URL}/auth/resend-verification`, {
+                    method: 'POST',
+                    body: { email: emailToResend }
+                })
+            } catch (error) {
+                throw error
+            }
+        },
+
+        /**
+         * Authenticates user and redirects to appropriate dashboard
+         * @param credentials User login credentials
+         */
+        async login(credentials: { email: string; password: string }) {
+            try {
+                const response = await $fetch<AuthResponse>(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    body: credentials,
+                    credentials: 'include'
                 })
 
-                user.value = response.user
-                isInitialized.value = true
-                console.log('Auth check successful:', response.user)
-                return true
+                state.user.value = response.user
+                state.isInitialized.value = true
+
+                if (isAuthenticated.value) {
+                    const redirectPath = getDashboardRoute.value
+                    navigateTo(redirectPath)
+                }
+
+                return response
+            } catch (error) {
+                console.error('Login error:', error)
+                throw error
             }
-            return isAuthenticated.value
-        } catch (error) {
-            console.error('Auth check failed:', error)
-            user.value = null
-            isInitialized.value = true
-            return false
-        }
-    }
+        },
 
-    const register = async (userData: {
-        email: string
-        username: string
-        password: string
-    }) => {
-        try {
-            const response = await $fetch<AuthResponse>(`${baseURL}/auth/register`, {
-                method: 'POST',
-                body: userData
-            })
-
-            // Store the email in pendingEmail for verification
-            pendingEmail.value = userData.email
-
-            return response
-        } catch (error) {
-            throw error
-        }
-    }
-
-    const verifyEmail = async (email: string, verificationCode: string) => {
-        try {
-            // Use pendingEmail if no email is provided
-            const emailToVerify = email || pendingEmail.value
-
-            if (!emailToVerify) {
-                throw new Error('No email available for verification')
+        /**
+         * Logs out user and clears authentication state
+         */
+        async logout() {
+            try {
+                await $fetch(`${API_BASE_URL}/auth/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                })
+            } finally {
+                state.user.value = null
+                state.isInitialized.value = false
+                navigateTo('/auth/login')
             }
+        },
 
-            const response = await $fetch<AuthResponse>(`${baseURL}/auth/verify-email`, {
-                method: 'POST',
-                body: {email: emailToVerify, verificationCode}
-            })
-
-            // Clear pendingEmail after successful verification
-            pendingEmail.value = null
-
-            return response
-        } catch (error) {
-            throw error
-        }
-    }
-
-    const resendVerification = async (email: string) => {
-        try {
-            // Use pendingEmail if no email is provided
-            const emailToResend = email || pendingEmail.value
-
-            if (!emailToResend) {
-                throw new Error('No email available for resending verification')
+        /**
+         * Password Management Methods
+         */
+        async forgotPassword(email: string) {
+            try {
+                return await $fetch<AuthResponse>(`${API_BASE_URL}/auth/forgot-password`, {
+                    method: 'POST',
+                    body: { email }
+                })
+            } catch (error) {
+                throw error
             }
+        },
 
-            const response = await $fetch<AuthResponse>(`${baseURL}/auth/resend-verification`, {
-                method: 'POST',
-                body: {email: emailToResend}
-            })
-            return response
-        } catch (error) {
-            throw error
-        }
-    }
-
-    const login = async (credentials: { email: string; password: string }) => {
-        try {
-            const response = await $fetch<AuthResponse>(`${baseURL}/auth/login`, {
-                method: 'POST',
-                body: credentials,
-                credentials: 'include'
-            })
-
-            user.value = response.user
-            isInitialized.value = true
-
-            if (isAuthenticated.value) {
-                const redirectPath = user.value?.roles.includes('ADMIN')
-                    ? '/admin/dashboard'
-                    : '/employee/dashboard'
-
-                navigateTo(redirectPath)
+        async resetPassword(email: string, resetToken: string, newPassword: string) {
+            try {
+                return await $fetch<AuthResponse>(`${API_BASE_URL}/auth/reset-password`, {
+                    method: 'POST',
+                    body: { email, resetToken, newPassword }
+                })
+            } catch (error) {
+                throw error
             }
+        },
 
-            return response
-        } catch (error) {
-            console.error('Login error:', error)
-            throw error
+        async changePassword(currentPassword: string, newPassword: string) {
+            if (!state.user.value?.email) throw new Error('Not authenticated')
+
+            try {
+                return await $fetch<AuthResponse>(`${API_BASE_URL}/auth/change-password`, {
+                    method: 'POST',
+                    body: { currentPassword, newPassword },
+                    credentials: 'include'
+                })
+            } catch (error) {
+                throw error
+            }
         }
     }
 
-    const logout = async () => {
-        try {
-            await $fetch(`${baseURL}/auth/logout`, {
-                method: 'POST',
-                credentials: 'include'
-            })
-        } finally {
-            user.value = null
-            isInitialized.value = false
-            navigateTo('/auth/login')
-        }
-    }
-
-    const forgotPassword = async (email: string) => {
-        try {
-            const response = await $fetch<AuthResponse>(`${baseURL}/auth/forgot-password`, {
-                method: 'POST',
-                body: {email}
-            })
-            return response
-        } catch (error) {
-            throw error
-        }
-    }
-
-    const resetPassword = async (email: string, resetToken: string, newPassword: string) => {
-        try {
-            const response = await $fetch<AuthResponse>(`${baseURL}/auth/reset-password`, {
-                method: 'POST',
-                body: {email, resetToken, newPassword}
-            })
-            return response
-        } catch (error) {
-            throw error
-        }
-    }
-
-    // Update changePassword to use cookie authentication
-    const changePassword = async (currentPassword: string, newPassword: string) => {
-        try {
-            if (!user.value?.email) throw new Error('Not authenticated')
-
-            const response = await $fetch<AuthResponse>(`${baseURL}/auth/change-password`, {
-                method: 'POST',
-                body: {currentPassword, newPassword},
-                credentials: 'include'  // Use cookies for authentication
-            })
-            return response
-        } catch (error) {
-            throw error
-        }
-    }
-
+    // Return store interface
     return {
-        token,
-        refreshToken,
-        user,
+        ...state,
         isAuthenticated,
-        isInitialized,
-        pendingEmail,
-        checkAuth,
-        register,
-        verifyEmail,
-        resendVerification,
-        login,
-        logout,
-        forgotPassword,
-        resetPassword,
-        changePassword
+        getDashboardRoute,
+        ...authApi
     }
 })
