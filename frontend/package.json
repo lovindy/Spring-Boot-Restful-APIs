@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@morev/vue-transitions": "^3.0.5",
     "@nuxt/ui": "^2.19.2",
     "@nuxtjs/axios": "^5.13.6",
     "@pinia-plugin-persistedstate/nuxt": "^1.2.1",
@@ -24,7 +25,13 @@
     "vee-validate": "^4.14.7",
     "vue": "latest",
     "vue-router": "latest",
+    "vue-toastification": "^2.0.0-rc.5",
     "yup": "^1.4.0",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@nuxtjs/tailwindcss": "^6.12.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49"
   }
 }
