@@ -6,8 +6,9 @@ pipeline {
         GITHUB_REPO = 'https://github.com/lovindy/Talentexis-Spring-Boot-APIs.git'
         DOCKER_CREDENTIALS = credentials('docker-credentials')
         ENV_FILE = credentials('env-file')
-        DOCKER_REGISTRY = 'docker.io' // Add your registry if different
+        DOCKER_REGISTRY = 'docker.io'
         DOCKER_REGISTRY_URL = "https://${DOCKER_REGISTRY}"
+        APP_PORT = '8081'  // Changed to match docker-compose
     }
 
     stages {
@@ -66,7 +67,7 @@ pipeline {
                             image: ${DOCKER_REGISTRY}/${DOCKER_CREDENTIALS_USR}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             container_name: talentexis-api
                             ports:
-                              - "8080:8080"
+                              - "${APP_PORT}:8080"
                             env_file:
                               - .env
                             restart: unless-stopped
@@ -95,9 +96,9 @@ pipeline {
         stage('Health Check') {
             steps {
                 script {
-                    sh '''
+                    sh """
                         for i in {1..30}; do
-                            if curl -s http://localhost:8080/actuator/health | grep -q "UP"; then
+                            if curl -s http://localhost:${APP_PORT}/actuator/health | grep -q "UP"; then
                                 echo "Application is healthy"
                                 exit 0
                             fi
@@ -106,7 +107,7 @@ pipeline {
                         done
                         echo "Application failed to become healthy"
                         exit 1
-                    '''
+                    """
                 }
             }
         }
