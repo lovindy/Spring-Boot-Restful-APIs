@@ -8,7 +8,7 @@ pipeline {
         ENV_FILE = credentials('env-file')
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_REGISTRY_URL = "https://${DOCKER_REGISTRY}"
-        APP_PORT = '8081'  // Changed to match docker-compose
+        APP_PORT = '8081'
     }
 
     stages {
@@ -27,10 +27,8 @@ pipeline {
 
         stage('Docker Login') {
             steps {
-                script {
-                    sh '''
-                        echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin $DOCKER_REGISTRY_URL
-                    '''
+                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASSWORD')]) {
+                    sh "echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USER --password-stdin \$DOCKER_REGISTRY_URL"
                 }
             }
         }
@@ -38,33 +36,28 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    def customImage = docker.build("${DOCKER_REGISTRY}/${DOCKER_CREDENTIALS_USR}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+                    docker.build("${DOCKER_REGISTRY}/${DOCKER_USER}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
                 }
             }
         }
 
         stage('Docker Push') {
             steps {
-                script {
-                    sh """
-                        docker push ${DOCKER_REGISTRY}/${DOCKER_CREDENTIALS_USR}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}
-                    """
+                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASSWORD')]) {
+                    sh "docker push ${DOCKER_REGISTRY}/${DOCKER_USER}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
                 }
             }
         }
 
         stage('Prepare Deployment') {
             steps {
-                script {
-                    // Copy environment file
+                withCredentials([file(credentialsId: 'env-file', variable: 'ENV_FILE')]) {
                     sh "cp \$ENV_FILE .env"
-
-                    // Create or update docker-compose file with full image path
                     writeFile file: 'docker-compose.yml', text: """
                         version: '3.8'
                         services:
                           api:
-                            image: ${DOCKER_REGISTRY}/${DOCKER_CREDENTIALS_USR}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}
+                            image: ${DOCKER_REGISTRY}/${DOCKER_USER}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             container_name: talentexis-api
                             ports:
                               - "${APP_PORT}:8080"
@@ -83,51 +76,51 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                script {
-                    sh '''
-                        docker-compose down || true
-                        docker-compose up -d
-                        docker system prune -f
-                    '''
-                }
+                sh '''
+                    docker-compose down || true
+                    docker-compose up -d
+                    docker system prune -f
+                '''
             }
         }
 
         stage('Health Check') {
             steps {
-                script {
-                    sh """
-                        for i in {1..30}; do
-                            if curl -s http://localhost:${APP_PORT}/actuator/health | grep -q "UP"; then
-                                echo "Application is healthy"
-                                exit 0
-                            fi
-                            echo "Waiting for application to be ready..."
-                            sleep 10
-                        done
-                        echo "Application failed to become healthy"
-                        exit 1
-                    """
-                }
+                sh """
+                    for i in {1..30}; do
+                        if curl -s http://localhost:${APP_PORT}/actuator/health | grep -q "UP"; then
+                            echo "Application is healthy"
+                            exit 0
+                        fi
+                        echo "Waiting for application to be ready..."
+                        sleep 10
+                    done
+                    echo "Application failed to become healthy"
+                    exit 1
+                """
             }
         }
     }
 
     post {
         always {
-            script {
-                sh 'docker logout ${DOCKER_REGISTRY_URL}'
+            node {
+                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASSWORD')]) {
+                    sh "docker logout \$DOCKER_REGISTRY_URL"
+                }
                 cleanWs()
             }
         }
         failure {
-            script {
-                sh '''
-                    if [ -f docker-compose.yml ]; then
-                        docker-compose down
-                        docker-compose up -d --no-deps api
-                    fi
-                '''
+            node {
+                script {
+                    sh '''
+                        if [ -f docker-compose.yml ]; then
+                            docker-compose down
+                            docker-compose up -d --no-deps api
+                        fi
+                    '''
+                }
             }
         }
     }
