@@ -104,23 +104,19 @@ pipeline {
 
     post {
         always {
-            node {
-                withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASSWORD')]) {
-                    sh "docker logout \$DOCKER_REGISTRY_URL"
-                }
-                cleanWs()
+            withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASSWORD')]) {
+                sh "docker logout \$DOCKER_REGISTRY_URL"
             }
+            cleanWs()
         }
         failure {
-            node {
-                script {
-                    sh '''
-                        if [ -f docker-compose.yml ]; then
-                            docker-compose down
-                            docker-compose up -d --no-deps api
-                        fi
-                    '''
-                }
+            script {
+                sh '''
+                    if [ -f docker-compose.yml ]; then
+                        docker-compose down
+                        docker-compose up -d --no-deps api
+                    fi
+                '''
             }
         }
     }
