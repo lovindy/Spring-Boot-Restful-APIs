@@ -6,6 +6,8 @@ pipeline {
         GITHUB_REPO = 'https://github.com/lovindy/Talentexis-Spring-Boot-APIs.git'
         DOCKER_CREDENTIALS = credentials('docker-credentials')
         ENV_FILE = credentials('env-file')
+        DOCKER_REGISTRY = 'docker.io' // Add your registry if different
+        DOCKER_REGISTRY_URL = "https://${DOCKER_REGISTRY}"
     }
 
     stages {
@@ -22,10 +24,30 @@ pipeline {
             }
         }
 
+        stage('Docker Login') {
+            steps {
+                script {
+                    sh '''
+                        echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin $DOCKER_REGISTRY_URL
+                    '''
+                }
+            }
+        }
+
         stage('Docker Build') {
             steps {
                 script {
-                    docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+                    def customImage = docker.build("${DOCKER_REGISTRY}/${DOCKER_CREDENTIALS_USR}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+                }
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                script {
+                    sh """
+                        docker push ${DOCKER_REGISTRY}/${DOCKER_CREDENTIALS_USR}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}
+                    """
                 }
             }
         }
@@ -36,12 +58,12 @@ pipeline {
                     // Copy environment file
                     sh "cp \$ENV_FILE .env"
 
-                    // Create or update docker-compose file
-                    writeFile file: 'docker-compose.yml', text: '''
+                    // Create or update docker-compose file with full image path
+                    writeFile file: 'docker-compose.yml', text: """
                         version: '3.8'
                         services:
                           api:
-                            image: ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                            image: ${DOCKER_REGISTRY}/${DOCKER_CREDENTIALS_USR}/${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             container_name: talentexis-api
                             ports:
                               - "8080:8080"
@@ -53,7 +75,7 @@ pipeline {
                         networks:
                           app-network:
                             driver: bridge
-                    '''
+                    """
                 }
             }
         }
@@ -61,7 +83,6 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Deploy using docker-compose
                     sh '''
                         docker-compose down || true
                         docker-compose up -d
@@ -74,7 +95,6 @@ pipeline {
         stage('Health Check') {
             steps {
                 script {
-                    // Wait for application to be ready
                     sh '''
                         for i in {1..30}; do
                             if curl -s http://localhost:8080/actuator/health | grep -q "UP"; then
@@ -94,11 +114,13 @@ pipeline {
 
     post {
         always {
-            cleanWs()
+            script {
+                sh 'docker logout ${DOCKER_REGISTRY_URL}'
+                cleanWs()
+            }
         }
         failure {
             script {
-                // Rollback to previous version if deployment fails
                 sh '''
                     if [ -f docker-compose.yml ]; then
                         docker-compose down
