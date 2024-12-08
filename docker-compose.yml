@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  api:
+    image: ${DOCKER_IMAGE}:${BUILD_NUMBER}
+    container_name: talentexis-api
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
