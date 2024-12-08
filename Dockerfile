@@ -6,7 +6,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 # Runtime stage
-FROM ubuntu:22.04
+FROM ubuntu:latest
 
 # Install OpenJDK-17
 RUN apt-get update && \

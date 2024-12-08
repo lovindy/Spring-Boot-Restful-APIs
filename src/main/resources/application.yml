@@ -1,0 +1,87 @@
+# Render Database Connection
+#spring:
+#  datasource:
+#    url: jdbc:postgresql://dpg-cta2bgqj1k6c738gegd0-a.singapore-postgres.render.com:5432/spring_api
+#    username: spring_api_user
+#    password: HNEERtubbQ3tzhcFnCWuzYdY0GY6GpaM
+
+spring:
+  application:
+    name: spring-restful
+  datasource:
+    url: ${DATASOURCE_URL}
+    username: ${DATASOURCE_USERNAME}
+    password: ${DATASOURCE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            trust: ${MAIL_HOST}
+          timeout: 5000
+          connectiontimeout: 5000
+          writetimeout: 5000
+    max:
+      resend:
+        attempts: ${MAX_RESEND_ATTEMPTS}
+    resend:
+      limit:
+        hours: ${RESEND_LIMIT_HOURS}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      username: default
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true
+
+server:
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: true
+
+jwt:
+  secret: ${JWT_SECRET_KEY}
+  access-token:
+    expiration: ${JWT_ACCESS_TOKEN_EXPIRATION}
+  refresh-token:
+    expiration: ${JWT_REFRESH_TOKEN_EXPIRATION}
+  password-reset-token-expiry-minutes: 15
+  redis:
+    prefix:
+      blacklist: "blacklisted_token:"
+      user-sessions: "user_sessions:"
+
+application:
+  frontend:
+    url: ${APPLICATION_FRONTEND_URL}
+  invitation:
+    base-url: ${APPLICATION_INVITATION_URL}
+
+logging:
+  level:
+    com:
+      example:
+        springrestful: DEBUG
+    org:
+      springframework:
+        web: DEBUG
+
+verification:
+  code:
+    expiry:
+      minutes: 10
