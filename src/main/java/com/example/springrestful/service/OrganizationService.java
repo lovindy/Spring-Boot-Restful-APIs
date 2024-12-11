@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.AccessDeniedException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -54,5 +56,14 @@ public class OrganizationService {
         organization.setUpdatedAt(LocalDateTime.now());
 
         return organizationRepository.save(organization);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Organization> getOrganizationsByAdmin() throws AccessDeniedException {
+        Long userId = authService.getCurrentUserId();
+        User admin = userService.getUserEntityById(userId);
+
+        // Retrieve all organizations owned by the admin
+        return new ArrayList<>(admin.getOwnedOrganizations());
     }
 }
