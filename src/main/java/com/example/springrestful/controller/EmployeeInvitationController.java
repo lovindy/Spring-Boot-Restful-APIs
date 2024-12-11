@@ -11,11 +11,25 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/v1/invitations")
 @RequiredArgsConstructor
 public class EmployeeInvitationController {
     private final EmployeeInvitationService invitationService;
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<InvitationResponse>> getOrganizationInvitations(
+            @RequestParam Long organizationId) {
+        List<EmployeeInvitation> invitations = invitationService
+                .findByOrganizationId(organizationId);
+        return ResponseEntity.ok(invitations.stream()
+                .map(InvitationResponse::fromEntity)
+                .collect(Collectors.toList()));
+    }
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
@@ -33,6 +47,13 @@ public class EmployeeInvitationController {
     @PostMapping("/{token}/accept")
     public ResponseEntity<Void> acceptInvitation(@PathVariable String token) {
         invitationService.acceptInvitation(token);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{token}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> cancelInvitation(@PathVariable String token) {
+        invitationService.cancelInvitation(token);
         return ResponseEntity.ok().build();
     }
 }

@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.redis.core.RedisTemplate;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -147,5 +148,42 @@ public class EmployeeInvitationService {
 
         redisTemplate.delete(cacheKey);
         redisTemplate.delete(tokenKey);
+    }
+
+    public List<EmployeeInvitation> findByOrganizationId(Long organizationId) {
+        // First check if organization exists
+        organizationService.getOrganizationById(organizationId);
+
+        // Get all active (PENDING) invitations for the organization
+        return invitationRepository.findByOrganizationIdAndStatus(
+                organizationId,
+                EmployeeInvitation.InvitationStatus.PENDING
+        );
+    }
+
+    @Transactional
+    public void cancelInvitation(String token) {
+        // First check Redis cache
+        Optional<EmployeeInvitation> cachedInvitation = getInvitationFromCache(token);
+        EmployeeInvitation invitation = cachedInvitation.orElseGet(() ->
+                invitationRepository.findByInvitationToken(token)
+                        .orElseThrow(() -> new InvalidInvitationException("Invalid invitation token"))
+        );
+
+        // Can only cancel PENDING invitations
+        if (invitation.getStatus() != EmployeeInvitation.InvitationStatus.PENDING) {
+            throw new InvalidInvitationException("Cannot cancel non-pending invitation");
+        }
+
+        // Update status to CANCELLED
+        invitation.setStatus(EmployeeInvitation.InvitationStatus.CANCELLED);
+        invitationRepository.save(invitation);
+
+        // Update cache
+        updateInvitationCache(invitation);
+
+        // Optionally, could send an email to the user informing them that
+        // their invitation has been cancelled
+        // emailService.sendInvitationCancellationEmail(invitation.getEmail());
     }
 }

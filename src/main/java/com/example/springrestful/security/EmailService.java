@@ -87,6 +87,51 @@ public class EmailService {
         }
     }
 
+    public Optional<Map<Object, Object>> getInvitationData(String token) {
+        String cacheKey = INVITATION_CACHE_PREFIX + token;
+        Map<Object, Object> invitationData = redisTemplate.opsForHash().entries(cacheKey);
+        return invitationData.isEmpty() ? Optional.empty() : Optional.of(invitationData);
+    }
+
+    private void handleEmailFailure(String toEmail, String verificationCode) {
+        log.warn("⚠️ Implementing retry logic for failed email to: {}", toEmail);
+        // Add to dead letter queue or retry queue
+    }
+
+    /**
+     * Sends password reset token to user's email
+     */
+    public void sendPasswordResetToken(String toEmail, String resetToken) {
+        try {
+            if (toEmail == null || toEmail.trim().isEmpty()) {
+                throw new IllegalArgumentException("Recipient email cannot be null or empty");
+            }
+
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromEmail);
+            message.setTo(toEmail);
+            message.setSubject("Password Reset Request");
+            message.setText(String.format(
+                    "Hello,\n\n" +
+                            "We received a request to reset your password. " +
+                            "Your password reset code is: %s\n\n" +
+                            "This code will expire in %d minutes.\n\n" +
+                            "If you didn't request this, please ignore this email.\n\n" +
+                            "Best regards,\n" +
+                            "Your Application Team",
+                    resetToken,
+                    passwordResetTokenExpiryMinutes
+            ));
+
+            emailQueueService.queueEmail(toEmail, resetToken);
+            EmailUtil.logEmailSuccess("Password reset email queued", toEmail);
+
+        } catch (Exception e) {
+            EmailUtil.logEmailError("Failed to queue password reset email", toEmail, e);
+            throw new EmailSendingException("Failed to send password reset email", e);
+        }
+    }
+
     /**
      * Sends invitation process
      */
@@ -143,12 +188,6 @@ public class EmailService {
         }
     }
 
-    public Optional<Map<Object, Object>> getInvitationData(String token) {
-        String cacheKey = INVITATION_CACHE_PREFIX + token;
-        Map<Object, Object> invitationData = redisTemplate.opsForHash().entries(cacheKey);
-        return invitationData.isEmpty() ? Optional.empty() : Optional.of(invitationData);
-    }
-
     private void queueInvitationEmail(String email, String content) {
         try {
             Map<String, String> emailData = EmailUtil.createInvitationQueueData(email, content);
@@ -164,42 +203,29 @@ public class EmailService {
         return invitationBaseUrl + "/invitations/" + token + "/accept";
     }
 
-    private void handleEmailFailure(String toEmail, String verificationCode) {
-        log.warn("⚠️ Implementing retry logic for failed email to: {}", toEmail);
-        // Add to dead letter queue or retry queue
-    }
-
-    /**
-     * Sends password reset token to user's email
-     */
-    public void sendPasswordResetToken(String toEmail, String resetToken) {
+    public void sendInvitationCancellationEmail(String toEmail) {
         try {
-            if (toEmail == null || toEmail.trim().isEmpty()) {
-                throw new IllegalArgumentException("Recipient email cannot be null or empty");
-            }
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, StandardCharsets.UTF_8.name());
 
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
-            message.setTo(toEmail);
-            message.setSubject("Password Reset Request");
-            message.setText(String.format(
-                    "Hello,\n\n" +
-                            "We received a request to reset your password. " +
-                            "Your password reset code is: %s\n\n" +
-                            "This code will expire in %d minutes.\n\n" +
-                            "If you didn't request this, please ignore this email.\n\n" +
-                            "Best regards,\n" +
-                            "Your Application Team",
-                    resetToken,
-                    passwordResetTokenExpiryMinutes
-            ));
+            Context context = new Context();
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("email", toEmail);
+            context.setVariables(variables);
 
-            emailQueueService.queueEmail(toEmail, resetToken);
-            EmailUtil.logEmailSuccess("Password reset email queued", toEmail);
+            String emailContent = templateEngine.process("invitation-cancellation-email", context);
 
-        } catch (Exception e) {
-            EmailUtil.logEmailError("Failed to queue password reset email", toEmail, e);
-            throw new EmailSendingException("Failed to send password reset email", e);
+            helper.setTo(toEmail);
+            helper.setSubject("Invitation Cancelled");
+            helper.setText(emailContent, true);
+            helper.setFrom(fromEmail);
+
+            mailSender.send(message);
+            EmailUtil.logEmailSuccess("Cancellation email sent", toEmail);
+
+        } catch (MessagingException e) {
+            EmailUtil.logEmailError("Failed to send cancellation email", toEmail, e);
+            throw new EmailSendingException("Failed to send cancellation email", e);
         }
     }
 }
