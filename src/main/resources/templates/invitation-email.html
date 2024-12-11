@@ -5,19 +5,26 @@
     <title>Organization Invitation</title>
 </head>
 <body>
-<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-    <h2>You've Been Invited!</h2>
-    <p>You have been invited to join <strong th:text="${organizationName}"></strong>.</p>
-    <p>Please click the button below to accept the invitation:</p>
-    <div style="text-align: center; margin: 30px 0;">
-        <a th:href="${invitationLink}"
-           style="background-color: #4CAF50; color: white; padding: 14px 20px;
-                      text-decoration: none; border-radius: 4px;">
-            Accept Invitation
-        </a>
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+    <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h2 style="color: #333; margin-bottom: 20px;">You've Been Invited!</h2>
+        <p>Hello,</p>
+        <p>You have been invited to join <strong th:text="${organizationName}">Organization</strong>.</p>
+        <p>Please click the button below to accept the invitation:</p>
+        <div style="text-align: center; margin: 30px 0;">
+            <a th:href="${invitationLink}"
+               style="background-color: #4CAF50; color: white; padding: 14px 25px;
+                          text-decoration: none; border-radius: 4px; display: inline-block;">
+                Accept Invitation
+            </a>
+        </div>
+        <p>This invitation will expire on <span th:text="${expiryDate}">expiry date</span>.</p>
+        <p style="color: #666; font-size: 14px;">If you did not expect this invitation, please ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message, please do not reply to this email.
+        </p>
     </div>
-    <p>This invitation will expire on <span th:text="${expiryDate}"></span>.</p>
-    <p>If you did not expect this invitation, please ignore this email.</p>
 </div>
 </body>
 </html>

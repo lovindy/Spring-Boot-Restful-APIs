@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.redis.core.RedisTemplate;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -147,5 +148,83 @@ public class EmployeeInvitationService {
 
         redisTemplate.delete(cacheKey);
         redisTemplate.delete(tokenKey);
+    }
+
+    public List<EmployeeInvitation> findByOrganizationId(Long organizationId) {
+        // First check if organization exists
+        organizationService.getOrganizationById(organizationId);
+
+        // Get all active (PENDING) invitations for the organization
+        return invitationRepository.findByOrganizationIdAndStatus(
+                organizationId,
+                EmployeeInvitation.InvitationStatus.PENDING
+        );
+    }
+
+    @Transactional
+    public EmployeeInvitation resendInvitation(Long organizationId, String email) {
+        // Check for existing pending invitation
+        Optional<EmployeeInvitation> existingInvitation = invitationRepository
+                .findByEmailAndOrganizationIdAndStatus(
+                        email,
+                        organizationId,
+                        EmployeeInvitation.InvitationStatus.PENDING
+                );
+
+        if (existingInvitation.isPresent()) {
+            EmployeeInvitation invitation = existingInvitation.get();
+
+            // Check if the existing invitation is close to expiry or expired
+            if (invitation.getTokenExpiry().isBefore(LocalDateTime.now().plusDays(1))) {
+                // Update existing invitation with new token and expiry
+                String newToken = generateUniqueToken();
+                invitation.setInvitationToken(newToken);
+                invitation.setTokenExpiry(LocalDateTime.now().plus(INVITATION_EXPIRE_TIME));
+
+                EmployeeInvitation updatedInvitation = invitationRepository.save(invitation);
+
+                // Update cache with new token
+                invalidateInvitation(invitation.getInvitationToken());
+                cacheInvitationData(updatedInvitation);
+
+                // Resend email
+                emailService.sendInvitationEmail(updatedInvitation);
+
+                return updatedInvitation;
+            } else {
+                // If invitation is still valid and not close to expiry, just resend the email
+                emailService.sendInvitationEmail(invitation);
+                return invitation;
+            }
+        }
+
+        // If no existing pending invitation, create a new one
+        return createInvitation(organizationId, email);
+    }
+
+    @Transactional
+    public void cancelInvitation(String token) {
+        // First check Redis cache
+        Optional<EmployeeInvitation> cachedInvitation = getInvitationFromCache(token);
+        EmployeeInvitation invitation = cachedInvitation.orElseGet(() ->
+                invitationRepository.findByInvitationToken(token)
+                        .orElseThrow(() -> new InvalidInvitationException("Invalid invitation token"))
+        );
+
+        // Can only cancel PENDING invitations
+        if (invitation.getStatus() != EmployeeInvitation.InvitationStatus.PENDING) {
+            throw new InvalidInvitationException("Cannot cancel non-pending invitation");
+        }
+
+        // Update status to CANCELLED
+        invitation.setStatus(EmployeeInvitation.InvitationStatus.CANCELLED);
+        invitationRepository.save(invitation);
+
+        // Update cache
+        updateInvitationCache(invitation);
+
+        // Optionally, could send an email to the user informing them that
+        // their invitation has been cancelled
+        // emailService.sendInvitationCancellationEmail(invitation.getEmail());
     }
 }
