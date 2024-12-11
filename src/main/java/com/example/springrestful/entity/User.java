@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 
 /**
  * User Entity representing a user in the system.
- *
+ * <p>
  * This class serves multiple purposes:
  * 1. JPA Entity for database persistence
  * 2. Spring Security UserDetails implementation

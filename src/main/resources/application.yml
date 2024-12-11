@@ -68,7 +68,7 @@ jwt:
 
 application:
   frontend:
-    url: ${APPLICATION_FRONTEND_URL}
+    url: http://localhost:3000 #${APPLICATION_FRONTEND_URL}
   invitation:
     base-url: ${APPLICATION_INVITATION_URL}
 
