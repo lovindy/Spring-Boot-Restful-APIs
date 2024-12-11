@@ -16,4 +16,10 @@ public interface EmployeeInvitationRepository extends JpaRepository<EmployeeInvi
     boolean existsByEmailAndOrganizationIdAndStatus(String email, Long organizationId, EmployeeInvitation.InvitationStatus status);
 
     Optional<EmployeeInvitation> findByEmailAndOrganizationId(String email, Long organizationId);
+
+    Optional<EmployeeInvitation> findByEmailAndOrganizationIdAndStatus(
+            String email,
+            Long organizationId,
+            EmployeeInvitation.InvitationStatus status
+    );
 }

@@ -162,6 +162,47 @@ public class EmployeeInvitationService {
     }
 
     @Transactional
+    public EmployeeInvitation resendInvitation(Long organizationId, String email) {
+        // Check for existing pending invitation
+        Optional<EmployeeInvitation> existingInvitation = invitationRepository
+                .findByEmailAndOrganizationIdAndStatus(
+                        email,
+                        organizationId,
+                        EmployeeInvitation.InvitationStatus.PENDING
+                );
+
+        if (existingInvitation.isPresent()) {
+            EmployeeInvitation invitation = existingInvitation.get();
+
+            // Check if the existing invitation is close to expiry or expired
+            if (invitation.getTokenExpiry().isBefore(LocalDateTime.now().plusDays(1))) {
+                // Update existing invitation with new token and expiry
+                String newToken = generateUniqueToken();
+                invitation.setInvitationToken(newToken);
+                invitation.setTokenExpiry(LocalDateTime.now().plus(INVITATION_EXPIRE_TIME));
+
+                EmployeeInvitation updatedInvitation = invitationRepository.save(invitation);
+
+                // Update cache with new token
+                invalidateInvitation(invitation.getInvitationToken());
+                cacheInvitationData(updatedInvitation);
+
+                // Resend email
+                emailService.sendInvitationEmail(updatedInvitation);
+
+                return updatedInvitation;
+            } else {
+                // If invitation is still valid and not close to expiry, just resend the email
+                emailService.sendInvitationEmail(invitation);
+                return invitation;
+            }
+        }
+
+        // If no existing pending invitation, create a new one
+        return createInvitation(organizationId, email);
+    }
+
+    @Transactional
     public void cancelInvitation(String token) {
         // First check Redis cache
         Optional<EmployeeInvitation> cachedInvitation = getInvitationFromCache(token);

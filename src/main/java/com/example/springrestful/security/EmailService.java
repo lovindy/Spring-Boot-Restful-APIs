@@ -135,9 +135,32 @@ public class EmailService {
     /**
      * Sends invitation process
      */
+//    public void sendInvitationEmail(EmployeeInvitation invitation) {
+//        try {
+//            cacheInvitationData(invitation);
+//
+//            MimeMessage message = mailSender.createMimeMessage();
+//            MimeMessageHelper helper = new MimeMessageHelper(message, StandardCharsets.UTF_8.name());
+//
+//            String emailContent = generateInvitationEmailContent(invitation);
+//
+//            helper.setTo(invitation.getEmail());
+//            helper.setSubject("Invitation to join " + invitation.getOrganization().getName());
+//            helper.setText(emailContent, true);
+//            helper.setFrom(fromEmail);
+//
+//            queueInvitationEmail(invitation.getEmail(), emailContent);
+//            EmailUtil.logEmailSuccess("Invitation email queued", invitation.getEmail());
+//
+//        } catch (MessagingException e) {
+//            EmailUtil.logEmailError("Failed to prepare invitation email", invitation.getEmail(), e);
+//            throw new EmailSendingException("Failed to send invitation email", e);
+//        }
+//    }
+
     public void sendInvitationEmail(EmployeeInvitation invitation) {
         try {
-            cacheInvitationData(invitation);
+            log.debug("Preparing to send invitation email to: {}", invitation.getEmail());
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, StandardCharsets.UTF_8.name());
@@ -149,12 +172,18 @@ public class EmailService {
             helper.setText(emailContent, true);
             helper.setFrom(fromEmail);
 
-            queueInvitationEmail(invitation.getEmail(), emailContent);
-            EmailUtil.logEmailSuccess("Invitation email queued", invitation.getEmail());
+            log.debug("Attempting to send email...");
+            mailSender.send(message);
+            log.info("✅ Invitation email sent successfully to: {}", invitation.getEmail());
 
         } catch (MessagingException e) {
-            EmailUtil.logEmailError("Failed to prepare invitation email", invitation.getEmail(), e);
-            throw new EmailSendingException("Failed to send invitation email", e);
+            log.error("❌ Failed to send invitation email to: {} - Error: {}",
+                    invitation.getEmail(), e.getMessage(), e);
+            throw new EmailSendingException("Failed to send invitation email: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("❌ Unexpected error sending invitation email to: {} - Error: {}",
+                    invitation.getEmail(), e.getMessage(), e);
+            throw new EmailSendingException("Unexpected error sending invitation email: " + e.getMessage(), e);
         }
     }
 

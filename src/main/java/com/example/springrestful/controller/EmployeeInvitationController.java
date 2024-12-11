@@ -56,4 +56,13 @@ public class EmployeeInvitationController {
         invitationService.cancelInvitation(token);
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/{email}/resend")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<InvitationResponse> resendInvitation(
+            @PathVariable String email,
+            @RequestParam Long organizationId) {
+        EmployeeInvitation invitation = invitationService.resendInvitation(organizationId, email);
+        return ResponseEntity.ok(InvitationResponse.fromEntity(invitation));
+    }
 }
