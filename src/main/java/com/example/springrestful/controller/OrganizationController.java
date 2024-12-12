@@ -11,8 +11,10 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 import java.nio.file.AccessDeniedException;
+import java.util.List;
 
 @RestController
+@CrossOrigin
 @RequestMapping("/api/v1/organizations")
 @RequiredArgsConstructor
 public class OrganizationController {
@@ -38,5 +40,15 @@ public class OrganizationController {
     public ResponseEntity<OrganizationResponse> getOrganization(@PathVariable Long id) {
         Organization organization = organizationService.getOrganizationById(id);
         return ResponseEntity.ok(OrganizationResponse.fromEntity(organization));
+    }
+
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ResponseEntity<List<OrganizationResponse>> getAllOrganizationsByAdmin() throws AccessDeniedException {
+        List<Organization> organizations = organizationService.getOrganizationsByAdmin();
+        List<OrganizationResponse> responses = organizations.stream()
+                .map(OrganizationResponse::fromEntity)
+                .toList();
+        return ResponseEntity.ok(responses);
     }
 }
